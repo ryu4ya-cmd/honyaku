@@ -222,8 +222,8 @@ function makeLivePreview(from, to, onText) {
 // How English is recognized: 'whisper' (on-device AI, best with accents) or
 // the iPhone's recognizer with a chosen accent.
 const EN_MODES = [
-  ['whisper', 'AI（なまりに強い・おすすめ）'],
-  ['en-US', 'iPhone標準・アメリカ英語'], ['en-GB', 'iPhone標準・イギリス英語'],
+  ['en-US', 'iPhone標準・アメリカ英語（速い・おすすめ）'],
+  ['whisper', 'AI（なまりに強いが遅い）'], ['en-GB', 'iPhone標準・イギリス英語'],
   ['en-AU', 'iPhone標準・オーストラリア英語'], ['en-IN', 'iPhone標準・インド英語'],
   ['en-SG', 'iPhone標準・シンガポール英語'], ['en-PH', 'iPhone標準・フィリピン英語'],
 ];
@@ -238,23 +238,23 @@ function canRefine() {
 function getEnMode() {
   let mode = null;
   try {
-    // v2 fixed the crashes that switched the AI off: give it another chance once.
-    if (localStorage.getItem('enModeReset') !== '2') {
+    // v3 made the fast iPhone recognizer the default: move everyone to it once.
+    if (localStorage.getItem('enModeReset') !== '3') {
       localStorage.removeItem('enMode');
-      localStorage.setItem('enModeReset', '2');
+      localStorage.setItem('enModeReset', '3');
     }
     mode = localStorage.getItem('enMode');
   } catch {}
   if (mode === 'whisper-fast') mode = 'whisper';
   // The page crashed last time, most likely out of memory while the AI ran:
   // use the iPhone's own recognizer instead.
-  if (crashedLastTime && lastSessionUsedWhisper && (mode === 'whisper' || mode === null)) {
+  if (crashedLastTime && lastSessionUsedWhisper && mode === 'whisper') {
     mode = 'en-US';
     try { localStorage.setItem('enMode', mode); } catch {}
     debugLog('前回の強制終了のため、英語の聞き取りを「' + EN_MODES.find(([c]) => c === mode)[1] + '」に切り替えました', true);
   }
   if (isWhisper(mode) && !window.WebAssembly) mode = null;
-  return EN_MODES.some(([code]) => code === mode) ? mode : 'whisper';
+  return EN_MODES.some(([code]) => code === mode) ? mode : 'en-US';
 }
 
 function isWhisper(mode) { return mode === 'whisper' || mode === 'whisper-fast'; }
