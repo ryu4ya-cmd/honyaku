@@ -102,6 +102,8 @@ setupEnModeSelect(document.getElementById('accent'), (mode) => {
 });
 let buffer = null;
 let handleText = null;
+let preview = null;
+let previewEl = null;
 
 function useWhisper() { return current === 'en' && enMode === 'whisper'; }
 
@@ -144,13 +146,24 @@ function showInterim(text) {
   if (!interimEl) {
     interimEl = document.createElement('div');
     interimEl.className = 'item interim';
+    interimEl.innerHTML = '<div class="src"></div>';
     log.appendChild(interimEl);
   }
-  interimEl.textContent = text;
+  interimEl.querySelector('.src').textContent = text;
   log.scrollTop = log.scrollHeight;
 }
 
-function clearInterim() { interimEl?.remove(); interimEl = null; }
+function clearInterim() { interimEl?.remove(); interimEl = null; previewEl = null; }
+
+function showPreview(text) {
+  if (!interimEl) return;
+  if (!previewEl) {
+    previewEl = document.createElement('div');
+    previewEl.className = 'dst';
+    interimEl.appendChild(previewEl);
+  }
+  previewEl.textContent = text;
+}
 
 function speak(text, lang) {
   if (!ttsOn || !window.speechSynthesis) return;
@@ -174,7 +187,10 @@ function speak(text, lang) {
 function start() {
   const { from, to, voice } = LANGS[current];
   handleText = (text) => {
+    preview?.cancel();
     clearInterim();
+    // Drop Safari's late final result for these same words.
+    if (rec) { rec.abort(); }
     const { shown, query } = prepareText(text, from);
     const dst = addItem(shown);
     translate(query, from, to)
@@ -195,6 +211,8 @@ function start() {
   rec.continuous = true;
   buffer?.clear();
   buffer = makeSentenceBuffer(handleText);
+  preview?.cancel();
+  preview = makeLivePreview(from, to, (t) => showPreview(t));
 
   rec.onresult = (e) => {
     let interim = '';
@@ -207,9 +225,12 @@ function start() {
         interim += text;
       }
     }
-    if (interim) buffer.interim();
-    const shownNow = [buffer.text(), interim].filter(Boolean).join(from === 'ja' ? '' : ' ');
-    if (shownNow) showInterim(shownNow);
+    if (interim) buffer.interim(interim, from);
+    const shownNow = buffer.text();
+    if (shownNow) {
+      showInterim(shownNow);
+      preview.update(from === 'ja' ? normalizeDialect(shownNow) : shownNow);
+    }
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
@@ -237,6 +258,7 @@ function stop() {
   listening = false;
   speaking = 0;
   buffer?.clear();
+  preview?.cancel();
   window.speechSynthesis?.cancel();
   rec?.stop();
   rec = null;

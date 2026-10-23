@@ -94,7 +94,9 @@ let turn = null;      // 'ja' | 'en' | null (stopped)
 let rec = null;
 let busy = false;     // translating or speaking: mic is paused
 let interimEls = {};
+let preview = null;
 const buffer = makeSentenceBuffer((text, lang) => {
+  preview?.cancel();
   clearInterim();
   if (!busy && turn) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
 });
@@ -144,8 +146,8 @@ function addMsg(lang, text, mine) {
   return div;
 }
 
-function showInterim(lang, text) {
-  if (!interimEls[lang]) interimEls[lang] = addMsg(lang, '', true);
+function showInterim(lang, text, mine = true) {
+  if (!interimEls[lang]) interimEls[lang] = addMsg(lang, '', mine);
   interimEls[lang].classList.add('interim');
   interimEls[lang].textContent = text;
   logOf(lang).scrollTop = logOf(lang).scrollHeight;
@@ -180,7 +182,10 @@ function listen() {
   rec = null;
   whisper.stop();
   const lang = turn;
+  preview?.cancel();
   if (lang === 'en' && enMode === 'whisper') { whisper.start(); return; }
+  const other = SIDES[lang].other;
+  preview = makeLivePreview(lang, other, (t) => { if (!busy && turn === lang) showInterim(other, t, false); });
   const r = rec = new SR();
   rec.lang = SIDES[lang].rec;
   rec.interimResults = true;
@@ -197,10 +202,12 @@ function listen() {
         interim += text;
       }
     }
-    if (interim) buffer.interim();
-    const sep = lang === 'ja' ? '' : ' ';
-    const shown = [buffer.text(), interim].filter(Boolean).join(sep);
-    if (shown) showInterim(lang, shown);
+    if (interim) buffer.interim(interim, lang);
+    const shown = buffer.text();
+    if (shown) {
+      showInterim(lang, shown);
+      preview.update(lang === 'ja' ? normalizeDialect(shown) : shown);
+    }
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
@@ -251,6 +258,7 @@ async function handleFinal(from, text) {
 function stopAll() {
   turn = null;
   buffer.clear();
+  preview?.cancel();
   busy = false;
   rec?.abort();
   rec = null;

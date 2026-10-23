@@ -4,7 +4,8 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 
 env.allowLocalModels = false;
 
-const MODEL = 'Xenova/whisper-base.en';
+// tiny.en is about 3x faster than base.en on a phone, which matters more in conversation.
+const MODEL = 'Xenova/whisper-tiny.en';
 let asr = null;
 const files = {};
 
@@ -22,6 +23,10 @@ function load() {
       dtype: 'q8',
       device: 'wasm',
       progress_callback: reportProgress,
+    }).then(async (p) => {
+      // The first run is much slower than later ones, so do it now on silence.
+      await p(new Float32Array(16000));
+      return p;
     }).catch((err) => { asr = null; throw err; });
   }
   return asr;

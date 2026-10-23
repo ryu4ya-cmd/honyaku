@@ -3,7 +3,7 @@
 // where each utterance starts and ends from the volume, and transcribes it.
 
 const SAMPLE_RATE = 16000;
-const END_SILENCE_MS = 1200;   // pause that ends an utterance (non-native speakers pause a lot)
+const END_SILENCE_MS = 800;    // pause that ends an utterance
 const MAX_UTTERANCE_MS = 20000;
 const MIN_SPEECH_MS = 400;
 const PREROLL_MS = 400;

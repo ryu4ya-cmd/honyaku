@@ -107,40 +107,75 @@ function unlockSpeech() {
 
 function pickVoice(utterance, lang) {
   utterance.lang = lang;
+  utterance.rate = 1.15;  // a little faster keeps the conversation moving
   const voice = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-') === lang);
   if (voice) utterance.voice = voice;
 }
 
 
-// Non-native speakers pause mid-sentence, and Safari cuts the sentence there.
-// Collect the pieces and translate only after a real pause, so a sentence
-// isn't translated in fragments.
-const PAUSE_MS = { ja: 1200, en: 1800 };
+// Decide when the speaker has finished. Safari is slow to mark a result as
+// final, so we don't wait for that: once no new words have arrived for a short
+// pause, the sentence (finished pieces plus the words still in progress) is
+// done. Callers must abort the recognizer after a flush so Safari's late
+// final result for the same words isn't used twice.
+const PAUSE_MS = { ja: 800, en: 1000 };
 
 function makeSentenceBuffer(onFlush) {
   let parts = [];
+  let pending = '';
   let lang = null;
   let timer = null;
+  const join = () => [...parts, pending].filter(Boolean).join(lang === 'ja' ? '' : ' ').trim();
   const flush = () => {
     timer = null;
-    const text = parts.join(lang === 'ja' ? '' : ' ').trim();
+    const text = join();
     const l = lang;
     parts = [];
+    pending = '';
     if (text) onFlush(text, l);
+  };
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(flush, PAUSE_MS[lang] || 900);
   };
   return {
     final(text, l) {
-      clearTimeout(timer);
       lang = l;
       parts.push(text);
-      timer = setTimeout(flush, PAUSE_MS[l] || 1500);
+      pending = '';
+      arm();
     },
-    // Still talking: wait for them to finish.
-    interim() { if (timer) { clearTimeout(timer); timer = null; } },
-    // An interim result can stall if the recognizer restarts, so re-arm on end.
-    rearm() { if (parts.length && !timer) timer = setTimeout(flush, PAUSE_MS[lang] || 1500); },
-    text() { return parts.join(lang === 'ja' ? '' : ' '); },
-    clear() { clearTimeout(timer); timer = null; parts = []; },
+    interim(text, l) {
+      lang = l;
+      pending = text;
+      arm();
+    },
+    // The recognizer restarted: keep waiting for the pause.
+    rearm() { if ((parts.length || pending) && !timer) arm(); },
+    text: join,
+    clear() { clearTimeout(timer); timer = null; parts = []; pending = ''; },
+  };
+}
+
+// Translate what's being said while the speaker is still talking, so the
+// listener can follow along. Requests are spaced out to stay under the free
+// translation service's rate limit.
+function makeLivePreview(from, to, onText) {
+  let latest = '', sent = '', timer = null, last = 0, seq = 0;
+  const run = () => {
+    timer = null;
+    if (latest.length - sent.length < 3 && sent && latest.startsWith(sent)) return;
+    sent = latest;
+    last = Date.now();
+    const id = ++seq;
+    translateGoogle(latest, from, to).then(t => { if (id === seq) onText(t); }).catch(() => {});
+  };
+  return {
+    update(text) {
+      latest = text;
+      if (!timer) timer = setTimeout(run, Math.max(0, 1200 - (Date.now() - last)));
+    },
+    cancel() { clearTimeout(timer); timer = null; latest = sent = ''; seq++; },
   };
 }
 
