@@ -106,7 +106,7 @@ setupEnModeSelect(document.getElementById('accent'), (mode) => {
   enMode = mode;
   LANGS.en.rec = systemEnLang(mode);
   whisper.setRefine(mode === 'whisper');
-  if (isWhisper(mode)) whisper.preload();
+  if (isWhisper(mode) && current === 'en') whisper.preload();
   if (listening && current === 'en') { stop(); start(); }
 });
 let buffer = null;
@@ -161,8 +161,8 @@ const whisper = createWhisperListener({
     } catch {}
   },
 });
+// The AI is loaded only once English is chosen, to save memory.
 whisper.setRefine(enMode === 'whisper');
-if (isWhisper(enMode)) whisper.preload();
 
 function scrollDown() { log.scrollTop = log.scrollHeight; }
 
@@ -335,6 +335,7 @@ mic.onclick = () => {
 document.getElementById('swap').onclick = () => {
   current = LANGS[current].to;
   renderDirection();
+  if (useWhisper()) whisper.preload();
   if (listening) { stop(); start(); }
 };
 

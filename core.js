@@ -155,11 +155,15 @@ const EN_MODES = [
 function getEnMode() {
   let mode = null;
   try { mode = localStorage.getItem('enMode'); } catch {}
-  // Running two AI models may have used up memory: drop to the light one.
-  if (crashedLastTime && (mode === 'whisper' || mode === null)) {
-    mode = 'whisper-fast';
-    try { localStorage.setItem('enMode', mode); } catch {}
-    debugLog('前回の強制終了のため、英語の認識を「AI: fast only」に切り替えました', true);
+  // The page crashed last time, most likely out of memory while the AI ran.
+  // Step down one level each time: both models → light model → iPhone's own.
+  if (crashedLastTime && lastSessionUsedWhisper) {
+    const next = mode === 'whisper-fast' ? 'en-US' : (mode === 'whisper' || mode === null) ? 'whisper-fast' : mode;
+    if (next !== mode) {
+      mode = next;
+      try { localStorage.setItem('enMode', mode); } catch {}
+      debugLog('前回の強制終了のため、英語の聞き取りを「' + EN_MODES.find(([c]) => c === mode)[1] + '」に切り替えました', true);
+    }
   }
   if (isWhisper(mode) && !window.WebAssembly) mode = null;
   return EN_MODES.some(([code]) => code === mode) ? mode : 'whisper';
@@ -228,20 +232,27 @@ window.addEventListener('unhandledrejection', (e) => debugLog('Promise error: ' 
 // iOS reloads a tab that ran out of memory without any event. Mark the page
 // as running and clear the mark on a normal exit; if the mark is still there
 // on the next load, the previous session crashed.
+let lastSessionUsedWhisper = false;
 const crashedLastTime = (() => {
   let crashed = false;
   try {
     crashed = localStorage.getItem('pageAlive') === '1';
     const prev = JSON.parse(localStorage.getItem('debugLog') || '[]');
     if (crashed) {
-      debugLines.push(...prev.slice(-30), '--- 前回は強制終了しました（メモリ不足の可能性）---');
+      debugLines.push(...prev.slice(-40), '--- 前回は強制終了しました（メモリ不足の可能性）---');
+      // Only look at the session that crashed, not older ones carried over in the log.
+      const start = prev.map(l => l.startsWith('---')).lastIndexOf(true) + 1;
+      lastSessionUsedWhisper = prev.slice(start).some(l => l.includes('whisper:'));
     }
     localStorage.setItem('pageAlive', '1');
   } catch {}
   const mark = (alive) => { try { alive ? localStorage.setItem('pageAlive', '1') : localStorage.removeItem('pageAlive'); } catch {} };
   addEventListener('pagehide', () => mark(false));
   // A backgrounded tab may be discarded without pagehide; that isn't a crash.
-  document.addEventListener('visibilitychange', () => mark(document.visibilityState === 'visible'));
+  document.addEventListener('visibilitychange', () => {
+    mark(document.visibilityState === 'visible');
+    debugLog('page ' + document.visibilityState);
+  });
   if (crashed) addEventListener('DOMContentLoaded', showDebugButton);
   return crashed;
 })();

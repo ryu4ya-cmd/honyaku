@@ -52,6 +52,7 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
   let nextId = 0;
   let failed = null;
   const durations = {};
+  const sentAt = {};
 
   // Voice activity detection state
   let noise = 0.005, hot = 0, inSpeech = false, silenceMs = 0, speechMs = 0;
@@ -68,6 +69,8 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
         onState(active ? 'listening' : 'ready');
         startAccurate();
       } else if (m.type === 'result') {
+        debugLog('whisper: result #' + m.id + ' in ' + Math.round(performance.now() - (sentAt[m.id] || 0)) + 'ms');
+        delete sentAt[m.id];
         const text = cleanTranscript(m.text, durations[m.id] || 0);
         if (active) onState('listening');
         if (text && active) onResult(text, m.id);
@@ -75,6 +78,7 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
       } else if (m.type === 'error') fail(m.message);
     };
     worker.onerror = (e) => fail(e.message || 'worker error');
+    debugLog('whisper: loading fast model');
     worker.postMessage({ type: 'load' });
   }
 
@@ -112,6 +116,8 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
     if (ms - silenceMs < MIN_SPEECH_MS) { onState('listening'); return; }
     const id = nextId++;
     durations[id] = ms;
+    sentAt[id] = performance.now();
+    debugLog('whisper: transcribe #' + id + ' (' + (ms / 1000).toFixed(1) + 's audio)');
     onState('transcribing');
     accurate?.postMessage({ type: 'transcribe', id, audio: audio.slice() });
     worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer]);
@@ -182,12 +188,14 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
       source = ctx.createMediaStreamSource(stream);
       proc = ctx.createScriptProcessor(4096, 1, 1);
       proc.onaudioprocess = onAudio;
+      debugLog('whisper: mic on');
       source.connect(proc);
       proc.connect(ctx.destination);
       onState(ready ? 'listening' : 'loading', 0);
     },
     // Releases the mic so speech output plays through the speaker, not the earpiece.
     stop() {
+      if (stream) debugLog('whisper: mic off');
       active = false;
       resetVad();
       proc?.disconnect();

@@ -162,8 +162,8 @@ const whisper = createWhisperListener({
     } catch {}
   },
 });
+// The AI is loaded when the conversation starts, not when the page opens, to save memory.
 whisper.setRefine(enMode === 'whisper');
-if (isWhisper(enMode)) whisper.preload();
 
 function setStatus(text, kind = 'idle') {
   statusEl.textContent = text;
@@ -364,6 +364,7 @@ for (const lang of ['ja', 'en']) {
     if (turn === lang) return stopAll();
     unlockSpeech();
     whisper.prime();
+    if (isWhisper(enMode)) whisper.preload();
     window.speechSynthesis?.cancel();
     busy = false;
     buffer.clear();
