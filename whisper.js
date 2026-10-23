@@ -63,7 +63,8 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
     worker = new Worker('whisper-worker.js?model=fast', { type: 'module' });
     worker.onmessage = (e) => {
       const m = e.data;
-      if (m.type === 'progress') onState('loading', m.percent);
+      if (m.type === 'log') debugLog('whisper: ' + m.message);
+      else if (m.type === 'progress') onState('loading', m.percent);
       else if (m.type === 'ready') {
         ready = true;
         onState(active ? 'listening' : 'ready');

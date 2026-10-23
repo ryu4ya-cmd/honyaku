@@ -19,17 +19,39 @@ function reportProgress(p) {
   postMessage({ type: 'progress', percent: Math.round(loaded / total * 100) });
 }
 
-function load() {
-  if (!asr) {
-    asr = pipeline('automatic-speech-recognition', MODEL, {
-      dtype: 'q8',
-      device: 'wasm',
-      progress_callback: reportProgress,
-    }).then(async (p) => {
+// The GPU (WebGPU, available in recent Safari) is several times faster than the
+// CPU. The fast model uses it when it can; the accurate one stays on the CPU so
+// the two don't fight over the GPU.
+async function hasGpu() {
+  try { return !!(self.navigator?.gpu && await navigator.gpu.requestAdapter()); } catch { return false; }
+}
+
+function create(device) {
+  const opts = device === 'webgpu'
+    ? { device, dtype: { encoder_model: 'fp32', decoder_model_merged: 'q4' } }
+    : { device, dtype: 'q8' };
+  return pipeline('automatic-speech-recognition', MODEL, { ...opts, progress_callback: reportProgress })
+    .then(async (p) => {
       // The first run is much slower than later ones, so do it now on silence.
       await p(new Float32Array(16000));
       return p;
-    }).catch((err) => { asr = null; throw err; });
+    });
+}
+
+function load() {
+  if (!asr) {
+    asr = (async () => {
+      if (MODEL === MODELS.fast && await hasGpu()) {
+        try {
+          const p = await create('webgpu');
+          postMessage({ type: 'log', message: 'using GPU' });
+          return p;
+        } catch (err) {
+          postMessage({ type: 'log', message: 'GPU failed, using CPU: ' + (err?.message || err) });
+        }
+      }
+      return create('wasm');
+    })().catch((err) => { asr = null; throw err; });
   }
   return asr;
 }
@@ -42,7 +64,7 @@ onmessage = async (e) => {
       postMessage({ type: 'ready' });
     } else if (type === 'transcribe') {
       const transcriber = await load();
-      const out = await transcriber(audio);
+      const out = await transcriber(audio, { max_new_tokens: 96 });
       postMessage({ type: 'result', id, text: out.text || '' });
     }
   } catch (err) {

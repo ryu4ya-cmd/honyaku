@@ -123,7 +123,17 @@ let handleText = null;
 let preview = null;
 let previewEl = null;
 
-function useWhisper() { return current === 'en' && isWhisper(enMode); }
+// Until the AI has loaded, English is heard by the iPhone recognizer so there is no wait.
+function useWhisper() { return current === 'en' && isWhisper(enMode) && whisper.ready; }
+
+// The AI finished loading while English was being heard the standard way: switch over between sentences.
+function switchToWhisper() {
+  if (!listening || current !== 'en' || !useWhisper() || !rec) return;
+  if (speaking || buffer?.text()) { setTimeout(switchToWhisper, 1000); return; }
+  debugLog('switching to AI listening');
+  stop(true);
+  start();
+}
 
 // kind: idle | listening | working | speaking | loading | error
 function setStatus(text, kind = 'idle') {
@@ -145,6 +155,11 @@ const whisper = createWhisperListener({
       document.getElementById('accent').value = 'en-US';
       if (listening && current === 'en') { stop(); start(); }
       setStatus('AIが使えないため標準の聞き取りに切り替えました', 'error');
+      return;
+    }
+    if (state === 'ready') { switchToWhisper(); return; }
+    if (state === 'loading' && listening && current === 'en' && rec && !speaking) {
+      setStatus('英語を聞いています（AI準備中 ' + (info || 0) + '%）', 'listening');
       return;
     }
     if (!listening || !useWhisper()) return;
@@ -275,6 +290,7 @@ function start() {
       .then(t => { dst.textContent = t; item.dataset.say = t; scrollDown(); listeningStatus(); speak(t, voice); })
       .catch(err => { dst.textContent = '（翻訳できませんでした）'; debugLog('translate error: ' + err.message, true); listeningStatus(); });
   };
+  if (current === 'en' && isWhisper(enMode)) whisper.preload();
   if (useWhisper()) {
     listening = true;
     setMicUi(true);

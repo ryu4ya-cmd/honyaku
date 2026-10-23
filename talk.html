@@ -147,6 +147,13 @@ const whisper = createWhisperListener({
       return;
     }
     if (turn !== 'en' || busy) return;
+    if (state === 'ready') {
+      // Switch to the AI between sentences.
+      const sw = () => { if (turn === 'en' && !busy && rec && whisper.ready) { if (buffer.text()) setTimeout(sw, 1000); else { debugLog('switching to AI listening'); listen(); } } };
+      sw();
+      return;
+    }
+    if (state === 'loading' && rec) { SIDES.en.el.querySelector('.hint').textContent = 'Your turn — speak English (AI loading ' + (info || 0) + '%)'; return; }
     if (state === 'loading') { setPhase('load'); SIDES.en.el.querySelector('.hint').textContent = 'Getting the AI ready… ' + (info || 0) + '% (first time only)'; }
     else if (state === 'listening') { setPhase('turn'); clearInterim(); }
     else if (state === 'hearing') showInterim('en', '🎙 …');
@@ -273,7 +280,11 @@ function listen() {
   const lang = turn;
   preview?.cancel();
   setPhase('turn');
-  if (lang === 'en' && isWhisper(enMode)) { whisper.start(); return; }
+  if (lang === 'en' && isWhisper(enMode)) {
+    // Until the AI has loaded, the iPhone recognizer listens so there is no wait.
+    if (whisper.ready) { whisper.start(); return; }
+    whisper.preload();
+  }
   const other = SIDES[lang].other;
   preview = makeLivePreview(lang, other, (t) => { if (!busy && turn === lang) showInterim(other, t, false); });
   const r = rec = new SR();
