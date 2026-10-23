@@ -77,6 +77,11 @@
       <select id="rate"></select>
     </label>
     <label class="field">
+      <span>周りの音のカット</span>
+      <select id="noise"></select>
+      <small>周りの声や雑音を拾うときは「強め」に。小さい声が拾われにくくなったら「標準」に戻してください。</small>
+    </label>
+    <label class="field">
       <span>英語の聞き取り方式</span>
       <select id="accent"></select>
       <small>なまりのある英語は「AI・高精度」がおすすめです。初回のみAIのダウンロード（Wi-Fi推奨）があります。</small>
@@ -260,6 +265,7 @@ function start() {
     // Drop Safari's late final result for these same words.
     lastFlush = { text, at: Date.now() };
     if (rec) rec.abort();
+    if (isNoiseText(text)) { debugLog('ignored as noise: ' + text); listeningStatus(); return; }
     const { shown, query } = prepareText(text, from);
     const item = addItem(shown, voice);
     const dst = item.querySelector('.dst');
@@ -293,7 +299,8 @@ function start() {
       const r = e.results[i];
       const text = r[0].transcript.trim();
       if (r.isFinal) {
-        if (text && !isLateDuplicate(text)) buffer.final(text, from);
+        if (isNoiseResult(r[0])) { debugLog('ignored as noise (low confidence): ' + text); buffer.drop(); }
+        else if (text && !isLateDuplicate(text)) buffer.final(text, from);
       } else {
         interim += text;
       }
@@ -303,7 +310,7 @@ function start() {
     if (shownNow) {
       showInterim(shownNow);
       preview.update(normalizeSpeech(shownNow, from));
-    }
+    } else { preview.cancel(); clearInterim(); }
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
@@ -365,6 +372,7 @@ document.getElementById('tts').onchange = (e) => {
 };
 
 setupRateSelect(document.getElementById('rate'));
+setupNoiseSelect(document.getElementById('noise'));
 renderDirection();
 </script>
 </body>

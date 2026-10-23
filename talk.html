@@ -84,6 +84,11 @@
       <select id="rate"></select>
     </label>
     <label class="field">
+      <span>周りの音のカット</span>
+      <select id="noise"></select>
+      <small>周りの声や雑音を拾うときは「強め」に。小さい声が拾われにくくなったら「標準」に戻してください。</small>
+    </label>
+    <label class="field">
       <span>英語の聞き取り方式</span>
       <select id="accent"></select>
       <small>なまりのある英語は「AI・高精度」がおすすめです。動きが重いときは「AI・軽量」にしてください。</small>
@@ -116,6 +121,7 @@ let preview = null;
 const buffer = makeSentenceBuffer((text, lang) => {
   preview?.cancel();
   clearInterim();
+  if (isNoiseText(text)) { debugLog('ignored as noise: ' + text); return; }
   if (!busy && turn) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
 }, () => { try { rec?.stop(); } catch {} });  // on a pause, ask Safari for its more accurate final text
 let enMode = getEnMode();
@@ -281,7 +287,8 @@ function listen() {
       const r = e.results[i];
       const text = r[0].transcript.trim();
       if (r.isFinal) {
-        if (text) buffer.final(text, lang);
+        if (isNoiseResult(r[0])) { debugLog('ignored as noise (low confidence): ' + text); buffer.drop(); }
+        else if (text) buffer.final(text, lang);
       } else {
         interim += text;
       }
@@ -291,7 +298,7 @@ function listen() {
     if (shown) {
       showInterim(lang, shown);
       preview.update(normalizeSpeech(shown, lang));
-    }
+    } else { preview.cancel(); clearInterim(); }
   };
   rec.onerror = (e) => {
     if (e.error !== 'no-speech' && e.error !== 'aborted') debugLog('recognition error (' + lang + '): ' + e.error, true);
@@ -389,6 +396,7 @@ document.getElementById('tts').onchange = (e) => {
   if (!ttsOn) window.speechSynthesis?.cancel();
 };
 setupRateSelect(document.getElementById('rate'));
+setupNoiseSelect(document.getElementById('noise'));
 render();
 </script>
 </body>

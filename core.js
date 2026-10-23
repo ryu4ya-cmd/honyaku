@@ -81,6 +81,48 @@ function setupRateSelect(select) {
   select.onchange = () => { try { localStorage.setItem('speechRate', select.value); } catch {} };
 }
 
+// Noise cut: how hard to ignore surrounding sound.
+// conf: Safari results below this confidence are dropped (0 means unknown, kept).
+// vad: for the AI listener, how much louder than the room a sound must be to count as speech.
+const NOISE_LEVELS = {
+  off:    { name: 'オフ',   conf: 0,    minChars: 1, vadMul: 2.5, vadMin: 0.012, minSpeechMs: 400 },
+  normal: { name: '標準',   conf: 0.25, minChars: 2, vadMul: 3.5, vadMin: 0.018, minSpeechMs: 500 },
+  strong: { name: '強め（うるさい場所）', conf: 0.45, minChars: 3, vadMul: 5,   vadMin: 0.03,  minSpeechMs: 700 },
+};
+
+function getNoiseLevel() {
+  let v = 'normal';
+  try { v = localStorage.getItem('noiseCut') || 'normal'; } catch {}
+  return NOISE_LEVELS[v] ? v : 'normal';
+}
+
+function noiseSettings() { return NOISE_LEVELS[getNoiseLevel()]; }
+
+function setupNoiseSelect(select, onChange) {
+  for (const [v, { name }] of Object.entries(NOISE_LEVELS)) select.add(new Option(name, v));
+  select.value = getNoiseLevel();
+  select.onchange = () => {
+    try { localStorage.setItem('noiseCut', select.value); } catch {}
+    onChange?.(select.value);
+  };
+}
+
+// A recognizer result that is probably background sound, not the speaker.
+function isNoiseResult(result) {
+  const c = result?.confidence;
+  return typeof c === 'number' && c > 0 && c < noiseSettings().conf;
+}
+
+const FILLERS = /^(え+|えー+と?|えっと|あ+|あの+|あのー+|う+ん*|うーん|ん+|へ+|は+|お+|uh+|um+|hmm+|h?m+|ah+|oh+|eh+|er+|the|a|an|and|so|yeah|ok)$/i;
+
+// Text too short, or only a filler sound, to be worth translating.
+function isNoiseText(text) {
+  const t = (text || '').replace(/[\s、。,.!?？！ー〜…]/g, '');
+  if (!t) return true;
+  if (FILLERS.test(t) || FILLERS.test((text || '').replace(/[、。,.!?？！…]/g, '').trim())) return true;
+  return [...t].length < noiseSettings().minChars;
+}
+
 function pickVoice(utterance, lang) {
   utterance.lang = lang;
   utterance.rate = Number(getSpeechRate());
@@ -144,6 +186,11 @@ function makeSentenceBuffer(onFlush, onPause) {
       arm();
     },
     // The recognizer restarted: keep waiting for the pause.
+    // A final result turned out to be background sound: forget the words it replaces.
+    drop() {
+      pending = '';
+      if (finishing) flush(); else if (!parts.length) { clearTimeout(timer); timer = null; }
+    },
     rearm() { if ((parts.length || pending) && !timer) arm(); },
     text: join,
     clear() { clearTimeout(timer); timer = null; parts = []; pending = ''; finishing = false; },

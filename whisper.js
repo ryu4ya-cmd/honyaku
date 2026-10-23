@@ -73,7 +73,7 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
         delete sentAt[m.id];
         const text = cleanTranscript(m.text, durations[m.id] || 0);
         if (active) onState('listening');
-        if (text && active) onResult(text, m.id);
+        if (text && active && !isNoiseText(text)) onResult(text, m.id);
         else delete durations[m.id];
       } else if (m.type === 'error') fail(m.message);
     };
@@ -113,7 +113,7 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
     const audio = concat(speech);
     const ms = speechMs;
     resetVad();
-    if (ms - silenceMs < MIN_SPEECH_MS) { onState('listening'); return; }
+    if (ms - silenceMs < Math.max(MIN_SPEECH_MS, noiseSettings().minSpeechMs)) { onState('listening'); return; }
     const id = nextId++;
     durations[id] = ms;
     sentAt[id] = performance.now();
@@ -130,7 +130,8 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
     let sum = 0;
     for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
     const rms = Math.sqrt(sum / chunk.length);
-    const threshold = Math.max(0.012, noise * 2.5);
+    const ns = noiseSettings();
+    const threshold = Math.max(ns.vadMin, noise * ns.vadMul);
 
     if (!inSpeech) {
       // Track background noise so a noisy room doesn't count as speech.
