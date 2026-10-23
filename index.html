@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ほんやく">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>リアルタイム翻訳</title>
+<style>
+  :root {
+    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
+    --accent: #2563eb; --rec: #dc2626; --border: #e2e8f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b1120; --card: #111827; --text: #f1f5f9; --muted: #94a3b8; --border: #1f2937; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    display: flex; flex-direction: column; height: 100dvh;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+  h1 { font-size: 18px; margin: 0; }
+  .lang {
+    display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden;
+  }
+  .lang button {
+    border: 0; background: transparent; color: var(--text); padding: 8px 14px; font-size: 14px;
+  }
+  .lang button.on { background: var(--accent); color: #fff; }
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
+  .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .src { color: var(--muted); font-size: 14px; }
+  .dst { font-size: 20px; margin-top: 4px; }
+  .interim { color: var(--muted); font-style: italic; }
+  #status { text-align: center; color: var(--muted); font-size: 13px; min-height: 1.4em; }
+  #mic {
+    margin: 8px auto 16px; width: 72px; height: 72px; border-radius: 50%; border: 0;
+    background: var(--accent); color: #fff; font-size: 30px;
+  }
+  #mic.rec { background: var(--rec); }
+  .empty { color: var(--muted); text-align: center; margin-top: 30vh; }
+</style>
+</head>
+<body>
+<header>
+  <h1>リアルタイム翻訳</h1>
+  <div class="lang" role="group" aria-label="話す言語">
+    <button id="ja" class="on">日本語→英語</button>
+    <button id="en">英語→日本語</button>
+  </div>
+</header>
+<div id="log"><p class="empty">マイクボタンを押して話してください</p></div>
+<div id="status"></div>
+<button id="mic" aria-label="録音開始">🎤</button>
+
+<script>
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const log = document.getElementById('log');
+const statusEl = document.getElementById('status');
+const mic = document.getElementById('mic');
+const LANGS = { ja: { rec: 'ja-JP', pair: 'ja|en' }, en: { rec: 'en-US', pair: 'en|ja' } };
+let current = 'ja';
+let rec = null;
+let listening = false;
+let interimEl = null;
+
+function setStatus(t) { statusEl.textContent = t; }
+
+function addItem(src) {
+  log.querySelector('.empty')?.remove();
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = '<div class="src"></div><div class="dst">…</div>';
+  div.querySelector('.src').textContent = src;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div.querySelector('.dst');
+}
+
+function showInterim(text) {
+  log.querySelector('.empty')?.remove();
+  if (!interimEl) {
+    interimEl = document.createElement('div');
+    interimEl.className = 'item interim';
+    log.appendChild(interimEl);
+  }
+  interimEl.textContent = text;
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearInterim() { interimEl?.remove(); interimEl = null; }
+
+async function translate(text, pair) {
+  // MyMemory: free, no key. Max ~500 bytes per request.
+  const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) +
+    '&langpair=' + encodeURIComponent(pair);
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.responseStatus !== 200 && data.responseStatus !== '200') {
+    throw new Error(data.responseDetails || 'translation failed');
+  }
+  return data.responseData.translatedText;
+}
+
+function start() {
+  if (!SR) { setStatus('このブラウザは音声認識に対応していません。iPhoneのSafariで開いてください。'); return; }
+  rec = new SR();
+  rec.lang = LANGS[current].rec;
+  rec.interimResults = true;
+  rec.continuous = true;
+  const pair = LANGS[current].pair;
+
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const text = r[0].transcript.trim();
+      if (r.isFinal) {
+        clearInterim();
+        if (!text) continue;
+        const dst = addItem(text);
+        translate(text, pair)
+          .then(t => { dst.textContent = t; })
+          .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
+      } else {
+        interim += text;
+      }
+    }
+    if (interim) showInterim(interim);
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed') {
+      setStatus('マイクが許可されていません。設定でSafariのマイクと音声入力（Siri）を有効にしてください。');
+      stop();
+    } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      setStatus('エラー：' + e.error);
+    }
+  };
+  // Safari stops recognition after a pause, so restart while still listening.
+  rec.onend = () => { if (listening) { try { rec.start(); } catch {} } };
+
+  listening = true;
+  rec.start();
+  mic.classList.add('rec');
+  mic.textContent = '■';
+  setStatus('聞き取り中…');
+}
+
+function stop() {
+  listening = false;
+  rec?.stop();
+  clearInterim();
+  mic.classList.remove('rec');
+  mic.textContent = '🎤';
+  setStatus('');
+}
+
+mic.onclick = () => listening ? stop() : start();
+
+for (const id of ['ja', 'en']) {
+  document.getElementById(id).onclick = () => {
+    current = id;
+    document.getElementById('ja').classList.toggle('on', id === 'ja');
+    document.getElementById('en').classList.toggle('on', id === 'en');
+    if (listening) { stop(); start(); }
+  };
+}
+</script>
+</body>
+</html>
