@@ -189,7 +189,8 @@ function makeLivePreview(from, to, onText) {
 // How English is recognized: 'whisper' (on-device AI, best with accents) or
 // the iPhone's recognizer with a chosen accent.
 const EN_MODES = [
-  ['whisper', 'High accuracy (AI)'],
+  ['whisper', 'AI: fast + accurate'],
+  ['whisper-fast', 'AI: fast only (light)'],
   ['en-US', 'iPhone: English (US)'], ['en-GB', 'iPhone: English (UK)'],
   ['en-AU', 'iPhone: English (Australia)'], ['en-IN', 'iPhone: English (India)'],
   ['en-SG', 'iPhone: English (Singapore)'], ['en-PH', 'iPhone: English (Philippines)'],
@@ -198,12 +199,20 @@ const EN_MODES = [
 function getEnMode() {
   let mode = null;
   try { mode = localStorage.getItem('enMode'); } catch {}
-  if (mode === 'whisper' && !window.WebAssembly) mode = null;
+  // Running two AI models may have used up memory: drop to the light one.
+  if (crashedLastTime && (mode === 'whisper' || mode === null)) {
+    mode = 'whisper-fast';
+    try { localStorage.setItem('enMode', mode); } catch {}
+    debugLog('前回の強制終了のため、英語の認識を「AI: fast only」に切り替えました', true);
+  }
+  if (isWhisper(mode) && !window.WebAssembly) mode = null;
   return EN_MODES.some(([code]) => code === mode) ? mode : 'whisper';
 }
 
+function isWhisper(mode) { return mode === 'whisper' || mode === 'whisper-fast'; }
+
 // Language code for the iPhone recognizer (used when Whisper is off).
-function systemEnLang(mode) { return mode === 'whisper' ? 'en-US' : mode; }
+function systemEnLang(mode) { return isWhisper(mode) ? 'en-US' : mode; }
 
 function setupEnModeSelect(select, onChange) {
   for (const [code, name] of EN_MODES) select.add(new Option(name, code));
@@ -213,3 +222,70 @@ function setupEnModeSelect(select, onChange) {
     onChange?.(select.value);
   };
 }
+
+// Debug log: records errors and key events so problems seen on the phone can
+// be reported. A 🐞 button appears once something goes wrong; tapping it shows
+// the log with a copy button.
+const debugLines = [];
+
+function debugLog(msg, isError) {
+  const line = new Date().toTimeString().slice(0, 8) + ' ' + msg;
+  debugLines.push(line);
+  if (debugLines.length > 80) debugLines.shift();
+  try { localStorage.setItem('debugLog', JSON.stringify(debugLines)); } catch {}
+  if (isError) showDebugButton();
+}
+
+function showDebugButton() {
+  if (document.getElementById('debug-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'debug-btn';
+  btn.textContent = '🐞';
+  btn.setAttribute('aria-label', 'エラー内容を表示');
+  btn.style.cssText = 'position:fixed;left:8px;bottom:calc(8px + env(safe-area-inset-bottom));z-index:50;' +
+    'width:40px;height:40px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;font-size:20px;';
+  btn.onclick = showDebugPanel;
+  document.body.appendChild(btn);
+}
+
+function showDebugPanel() {
+  const panel = document.createElement('div');
+  panel.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  panel.innerHTML = '<div style="background:#fff;color:#0f172a;border-radius:12px;padding:12px;width:100%;max-width:560px;max-height:80vh;display:flex;flex-direction:column;gap:8px">' +
+    '<b>エラー内容（このまま開発者に送ってください）</b>' +
+    '<pre style="flex:1;overflow:auto;white-space:pre-wrap;font-size:12px;margin:0;background:#f1f5f9;padding:8px;border-radius:8px"></pre>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end"><button data-a="copy">コピー</button><button data-a="close">閉じる</button></div></div>';
+  const info = navigator.userAgent + '\n' + location.href + '\n\n';
+  panel.querySelector('pre').textContent = info + debugLines.join('\n');
+  panel.onclick = async (e) => {
+    const a = e.target.dataset?.a;
+    if (a === 'copy') {
+      try { await navigator.clipboard.writeText(info + debugLines.join('\n')); e.target.textContent = 'コピーしました'; } catch {}
+    } else if (a === 'close' || e.target === panel) panel.remove();
+  };
+  document.body.appendChild(panel);
+}
+
+window.addEventListener('error', (e) => debugLog('JS error: ' + e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno, true));
+window.addEventListener('unhandledrejection', (e) => debugLog('Promise error: ' + (e.reason?.message || e.reason), true));
+
+// iOS reloads a tab that ran out of memory without any event. Mark the page
+// as running and clear the mark on a normal exit; if the mark is still there
+// on the next load, the previous session crashed.
+const crashedLastTime = (() => {
+  let crashed = false;
+  try {
+    crashed = localStorage.getItem('pageAlive') === '1';
+    const prev = JSON.parse(localStorage.getItem('debugLog') || '[]');
+    if (crashed) {
+      debugLines.push(...prev.slice(-30), '--- 前回は強制終了しました（メモリ不足の可能性）---');
+    }
+    localStorage.setItem('pageAlive', '1');
+  } catch {}
+  const mark = (alive) => { try { alive ? localStorage.setItem('pageAlive', '1') : localStorage.removeItem('pageAlive'); } catch {} };
+  addEventListener('pagehide', () => mark(false));
+  // A backgrounded tab may be discarded without pagehide; that isn't a crash.
+  document.addEventListener('visibilitychange', () => mark(document.visibilityState === 'visible'));
+  if (crashed) addEventListener('DOMContentLoaded', showDebugButton);
+  return crashed;
+})();

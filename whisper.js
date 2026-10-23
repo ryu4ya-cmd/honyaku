@@ -38,7 +38,12 @@ function cleanTranscript(text, ms) {
 
 // onResult(text, id) gets the fast transcript; onRefine(id, text) later gets
 // the accurate model's transcript of the same audio.
-function createWhisperListener({ onState, onResult, onRefine }) {
+function createWhisperListener({ onState: report, onResult, onRefine }) {
+  let refineOn = true;
+  const onState = (state, info) => {
+    if (state !== 'loading' && state !== 'hearing') debugLog('whisper: ' + state + (info ? ' ' + info : ''), state === 'error');
+    report(state, info);
+  };
   let worker = null;
   let accurate = null;
   let ready = false;
@@ -75,15 +80,19 @@ function createWhisperListener({ onState, onResult, onRefine }) {
 
   // Load the accurate model only after the fast one, so it doesn't slow the first download.
   function startAccurate() {
-    if (accurate || !onRefine) return;
+    if (accurate || !onRefine || !refineOn) return;
+    debugLog('whisper: loading accurate model');
     accurate = new Worker('whisper-worker.js?model=accurate', { type: 'module' });
     accurate.onmessage = (e) => {
       const m = e.data;
+      if (m.type === 'ready') debugLog('whisper: accurate model ready');
+      if (m.type === 'error') debugLog('whisper accurate error: ' + m.message, true);
       if (m.type !== 'result') return;
       const text = cleanTranscript(m.text, durations[m.id] || 0);
       delete durations[m.id];
       if (text) onRefine(m.id, text);
     };
+    accurate.onerror = (e) => debugLog('whisper accurate worker error: ' + (e.message || ''), true);
     accurate.postMessage({ type: 'load' });
   }
 
@@ -141,6 +150,12 @@ function createWhisperListener({ onState, onResult, onRefine }) {
   return {
     // Download the model ahead of time.
     preload() { ensureWorker(); },
+    // Turn the background accuracy check on or off (off saves memory).
+    setRefine(on) {
+      refineOn = on;
+      if (on) { if (ready) startAccurate(); }
+      else if (accurate) { accurate.terminate(); accurate = null; }
+    },
     get ready() { return ready; },
     // Must be called from a tap first: iOS only starts audio after a user gesture.
     prime() {

@@ -98,7 +98,8 @@ LANGS.en.rec = systemEnLang(enMode);
 setupEnModeSelect(document.getElementById('accent'), (mode) => {
   enMode = mode;
   LANGS.en.rec = systemEnLang(mode);
-  if (mode === 'whisper') whisper.preload();
+  whisper.setRefine(mode === 'whisper');
+  if (isWhisper(mode)) whisper.preload();
   if (listening && current === 'en') { stop(); start(); }
 });
 let buffer = null;
@@ -106,11 +107,11 @@ let handleText = null;
 let preview = null;
 let previewEl = null;
 
-function useWhisper() { return current === 'en' && enMode === 'whisper'; }
+function useWhisper() { return current === 'en' && isWhisper(enMode); }
 
 const whisper = createWhisperListener({
   onState(state, info) {
-    if (enMode !== 'whisper') return;
+    if (!isWhisper(enMode)) return;
     if (state === 'error') {
       setStatus('AI認識エラー：標準の認識に切り替えました');
       enMode = 'en-US';
@@ -139,7 +140,8 @@ const whisper = createWhisperListener({
     } catch {}
   },
 });
-if (enMode === 'whisper') whisper.preload();
+whisper.setRefine(enMode === 'whisper');
+if (isWhisper(enMode)) whisper.preload();
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -255,6 +257,7 @@ function start() {
       stop();
     } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
       setStatus('エラー：' + e.error);
+      debugLog('recognition error: ' + e.error, true);
     }
   };
   // Safari stops recognition after a pause, so restart while still listening.

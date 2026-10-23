@@ -106,13 +106,14 @@ SIDES.en.rec = systemEnLang(enMode);
 setupEnModeSelect(document.getElementById('accent'), (mode) => {
   enMode = mode;
   SIDES.en.rec = systemEnLang(mode);
-  if (mode === 'whisper') whisper.preload();
+  whisper.setRefine(mode === 'whisper');
+  if (isWhisper(mode)) whisper.preload();
   if (turn === 'en' && !busy) listen();
 });
 
 const whisper = createWhisperListener({
   onState(state, info) {
-    if (enMode !== 'whisper') return;
+    if (!isWhisper(enMode)) return;
     if (state === 'error') {
       // Fall back to the iPhone recognizer so the conversation can go on.
       statusEl.textContent = 'AI認識エラー：標準の認識に切り替えます';
@@ -146,7 +147,8 @@ const whisper = createWhisperListener({
     } catch {}
   },
 });
-if (enMode === 'whisper') whisper.preload();
+whisper.setRefine(enMode === 'whisper');
+if (isWhisper(enMode)) whisper.preload();
 
 function logOf(lang) { return SIDES[lang].el.querySelector('.log'); }
 
@@ -196,7 +198,7 @@ function listen() {
   whisper.stop();
   const lang = turn;
   preview?.cancel();
-  if (lang === 'en' && enMode === 'whisper') { whisper.start(); return; }
+  if (lang === 'en' && isWhisper(enMode)) { whisper.start(); return; }
   const other = SIDES[lang].other;
   preview = makeLivePreview(lang, other, (t) => { if (!busy && turn === lang) showInterim(other, t, false); });
   const r = rec = new SR();
@@ -223,6 +225,7 @@ function listen() {
     }
   };
   rec.onerror = (e) => {
+    if (e.error !== 'no-speech' && e.error !== 'aborted') debugLog('recognition error (' + lang + '): ' + e.error, true);
     if (e.error === 'not-allowed') {
       statusEl.textContent = 'マイクが許可されていません';
       stopAll();
