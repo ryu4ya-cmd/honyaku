@@ -111,3 +111,55 @@ function pickVoice(utterance, lang) {
   if (voice) utterance.voice = voice;
 }
 
+
+// Non-native speakers pause mid-sentence, and Safari cuts the sentence there.
+// Collect the pieces and translate only after a real pause, so a sentence
+// isn't translated in fragments.
+const PAUSE_MS = { ja: 1200, en: 1800 };
+
+function makeSentenceBuffer(onFlush) {
+  let parts = [];
+  let lang = null;
+  let timer = null;
+  const flush = () => {
+    timer = null;
+    const text = parts.join(lang === 'ja' ? '' : ' ').trim();
+    const l = lang;
+    parts = [];
+    if (text) onFlush(text, l);
+  };
+  return {
+    final(text, l) {
+      clearTimeout(timer);
+      lang = l;
+      parts.push(text);
+      timer = setTimeout(flush, PAUSE_MS[l] || 1500);
+    },
+    // Still talking: wait for them to finish.
+    interim() { if (timer) { clearTimeout(timer); timer = null; } },
+    // An interim result can stall if the recognizer restarts, so re-arm on end.
+    rearm() { if (parts.length && !timer) timer = setTimeout(flush, PAUSE_MS[lang] || 1500); },
+    text() { return parts.join(lang === 'ja' ? '' : ' '); },
+    clear() { clearTimeout(timer); timer = null; parts = []; },
+  };
+}
+
+// Accent of the English recognizer. Matching it to the speaker helps
+// recognition of non-native English.
+const ACCENTS = [
+  ['en-US', 'US'], ['en-GB', 'UK'], ['en-AU', 'Australia'],
+  ['en-IN', 'India'], ['en-SG', 'Singapore'], ['en-PH', 'Philippines'],
+];
+
+function getAccent() {
+  try { return localStorage.getItem('accent') || 'en-US'; } catch { return 'en-US'; }
+}
+
+function setupAccentSelect(select, onChange) {
+  for (const [code, name] of ACCENTS) select.add(new Option('English (' + name + ')', code));
+  select.value = getAccent();
+  select.onchange = () => {
+    try { localStorage.setItem('accent', select.value); } catch {}
+    onChange?.(select.value);
+  };
+}

@@ -46,6 +46,10 @@
   .dst { font-size: 20px; margin-top: 4px; }
   .interim { color: var(--muted); font-style: italic; }
   #status { text-align: center; color: var(--muted); font-size: 13px; min-height: 1.4em; }
+  .accent {
+    display: block; margin: 0 auto; font-size: 14px; color: var(--text);
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+  }
   #mic {
     margin: 8px auto 16px; width: 72px; height: 72px; border-radius: 50%; border: 0;
     background: var(--accent); color: #fff; font-size: 30px;
@@ -68,6 +72,7 @@
 </header>
 <div id="log"><p class="empty">マイクボタンを押して話してください</p></div>
 <div id="status"></div>
+<select id="accent" class="accent" aria-label="英語のなまり"></select>
 <button id="mic" aria-label="録音開始">🎤</button>
 
 <script src="core.js"></script>
@@ -86,6 +91,12 @@ let listening = false;
 let interimEl = null;
 let ttsOn = true;
 let speaking = 0;
+LANGS.en.rec = getAccent();
+setupAccentSelect(document.getElementById('accent'), (code) => {
+  LANGS.en.rec = code;
+  if (listening && current === 'en') { stop(); start(); }
+});
+let buffer = null;
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -136,6 +147,15 @@ function start() {
   rec.interimResults = true;
   rec.continuous = true;
   const { from, to, voice } = LANGS[current];
+  buffer?.clear();
+  buffer = makeSentenceBuffer((text) => {
+    clearInterim();
+    const { shown, query } = prepareText(text, from);
+    const dst = addItem(shown);
+    translate(query, from, to)
+      .then(t => { dst.textContent = t; speak(t, voice); })
+      .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
+  });
 
   rec.onresult = (e) => {
     let interim = '';
@@ -143,18 +163,14 @@ function start() {
       const r = e.results[i];
       const text = r[0].transcript.trim();
       if (r.isFinal) {
-        clearInterim();
-        if (!text) continue;
-        const { shown, query } = prepareText(text, from);
-        const dst = addItem(shown);
-        translate(query, from, to)
-          .then(t => { dst.textContent = t; speak(t, voice); })
-          .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
+        if (text) buffer.final(text, from);
       } else {
         interim += text;
       }
     }
-    if (interim) showInterim(interim);
+    if (interim) buffer.interim();
+    const shownNow = [buffer.text(), interim].filter(Boolean).join(from === 'ja' ? '' : ' ');
+    if (shownNow) showInterim(shownNow);
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
@@ -165,7 +181,10 @@ function start() {
     }
   };
   // Safari stops recognition after a pause, so restart while still listening.
-  rec.onend = () => { if (listening && !speaking) { try { rec.start(); } catch {} } };
+  rec.onend = () => {
+    buffer.rearm();
+    if (listening && !speaking) { try { rec.start(); } catch {} }
+  };
 
   listening = true;
   rec.start();
@@ -177,6 +196,7 @@ function start() {
 function stop() {
   listening = false;
   speaking = 0;
+  buffer?.clear();
   window.speechSynthesis?.cancel();
   rec?.stop();
   clearInterim();

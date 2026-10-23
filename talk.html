@@ -44,6 +44,10 @@
     background: var(--accent); color: #fff; font-size: 26px;
   }
   .side.turn .mic { background: var(--rec); }
+  .accent {
+    margin-top: 6px; align-self: flex-start; font-size: 14px; color: var(--text);
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+  }
   .middle {
     display: flex; justify-content: space-between; align-items: center;
     padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
@@ -60,6 +64,7 @@
     <div class="hint">Tap the mic and speak English</div>
     <button class="mic" aria-label="Speak English">🎤</button>
   </div>
+  <select id="accent" class="accent" aria-label="Your English accent"></select>
 </section>
 <div class="middle">
   <a href="./">← 通常モード</a>
@@ -88,6 +93,15 @@ let turn = null;      // 'ja' | 'en' | null (stopped)
 let rec = null;
 let busy = false;     // translating or speaking: mic is paused
 let interimEls = {};
+const buffer = makeSentenceBuffer((text, lang) => {
+  clearInterim();
+  if (!busy && turn) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
+});
+SIDES.en.rec = getAccent();
+setupAccentSelect(document.getElementById('accent'), (code) => {
+  SIDES.en.rec = code;
+  if (turn === 'en' && !busy) listen();
+});
 
 function logOf(lang) { return SIDES[lang].el.querySelector('.log'); }
 
@@ -145,13 +159,15 @@ function listen() {
       const r = e.results[i];
       const text = r[0].transcript.trim();
       if (r.isFinal) {
-        clearInterim();
-        if (text) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
-        return;
+        if (text) buffer.final(text, lang);
+      } else {
+        interim += text;
       }
-      interim += text;
     }
-    if (interim) showInterim(lang, interim);
+    if (interim) buffer.interim();
+    const sep = lang === 'ja' ? '' : ' ';
+    const shown = [buffer.text(), interim].filter(Boolean).join(sep);
+    if (shown) showInterim(lang, shown);
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
@@ -160,7 +176,10 @@ function listen() {
     }
   };
   // Safari stops recognition after a pause, so restart while it's still this side's turn.
-  rec.onend = () => { if (rec === r && turn === lang && !busy) { try { r.start(); } catch {} } };
+  rec.onend = () => {
+    buffer.rearm();
+    if (rec === r && turn === lang && !busy) { try { r.start(); } catch {} }
+  };
   try { rec.start(); } catch {}
 }
 
@@ -197,6 +216,7 @@ async function handleFinal(from, text) {
 
 function stopAll() {
   turn = null;
+  buffer.clear();
   busy = false;
   rec?.abort();
   rec = null;
@@ -212,6 +232,7 @@ for (const lang of ['ja', 'en']) {
     unlockSpeech();
     window.speechSynthesis?.cancel();
     busy = false;
+    buffer.clear();
     clearInterim();
     turn = lang;
     render();
