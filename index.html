@@ -76,6 +76,7 @@
 <button id="mic" aria-label="録音開始">🎤</button>
 
 <script src="core.js"></script>
+<script src="whisper.js"></script>
 <script>
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const log = document.getElementById('log');
@@ -91,12 +92,39 @@ let listening = false;
 let interimEl = null;
 let ttsOn = true;
 let speaking = 0;
-LANGS.en.rec = getAccent();
-setupAccentSelect(document.getElementById('accent'), (code) => {
-  LANGS.en.rec = code;
+let enMode = getEnMode();
+LANGS.en.rec = systemEnLang(enMode);
+setupEnModeSelect(document.getElementById('accent'), (mode) => {
+  enMode = mode;
+  LANGS.en.rec = systemEnLang(mode);
+  if (mode === 'whisper') whisper.preload();
   if (listening && current === 'en') { stop(); start(); }
 });
 let buffer = null;
+let handleText = null;
+
+function useWhisper() { return current === 'en' && enMode === 'whisper'; }
+
+const whisper = createWhisperListener({
+  onState(state, info) {
+    if (enMode !== 'whisper') return;
+    if (state === 'error') {
+      setStatus('AI認識エラー：標準の認識に切り替えました');
+      enMode = 'en-US';
+      LANGS.en.rec = 'en-US';
+      document.getElementById('accent').value = 'en-US';
+      if (listening && current === 'en') { stop(); start(); setStatus('AI認識エラー：標準の認識に切り替えました'); }
+      return;
+    }
+    if (!listening || !useWhisper()) return;
+    if (state === 'loading') setStatus('AIモデルを読み込み中… ' + (info || 0) + '%（初回のみ）');
+    else if (state === 'listening') { setStatus('聞き取り中…（AI）'); clearInterim(); }
+    else if (state === 'hearing') showInterim('🎙 …');
+    else if (state === 'transcribing') showInterim('…');
+  },
+  onResult(text) { if (listening && useWhisper()) handleText(text); },
+});
+if (enMode === 'whisper') whisper.preload();
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -131,9 +159,12 @@ function speak(text, lang) {
   // Pause the mic while speaking so the app doesn't hear its own voice.
   speaking++;
   rec?.abort();
+  whisper.stop();
   const done = () => {
     speaking = Math.max(0, speaking - 1);
-    if (!speaking && listening) { try { rec.start(); } catch {} }
+    if (speaking || !listening) return;
+    if (useWhisper()) whisper.start();
+    else { try { rec.start(); } catch {} }
   };
   u.onend = done;
   u.onerror = done;
@@ -141,21 +172,29 @@ function speak(text, lang) {
 }
 
 function start() {
-  if (!SR) { setStatus('このブラウザは音声認識に対応していません。iPhoneのSafariで開いてください。'); return; }
-  rec = new SR();
-  rec.lang = LANGS[current].rec;
-  rec.interimResults = true;
-  rec.continuous = true;
   const { from, to, voice } = LANGS[current];
-  buffer?.clear();
-  buffer = makeSentenceBuffer((text) => {
+  handleText = (text) => {
     clearInterim();
     const { shown, query } = prepareText(text, from);
     const dst = addItem(shown);
     translate(query, from, to)
       .then(t => { dst.textContent = t; speak(t, voice); })
       .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
-  });
+  };
+  if (useWhisper()) {
+    listening = true;
+    whisper.start();
+    mic.classList.add('rec');
+    mic.textContent = '■';
+    return;
+  }
+  if (!SR) { setStatus('このブラウザは音声認識に対応していません。iPhoneのSafariで開いてください。'); return; }
+  rec = new SR();
+  rec.lang = LANGS[current].rec;
+  rec.interimResults = true;
+  rec.continuous = true;
+  buffer?.clear();
+  buffer = makeSentenceBuffer(handleText);
 
   rec.onresult = (e) => {
     let interim = '';
@@ -181,9 +220,10 @@ function start() {
     }
   };
   // Safari stops recognition after a pause, so restart while still listening.
+  const r = rec;
   rec.onend = () => {
     buffer.rearm();
-    if (listening && !speaking) { try { rec.start(); } catch {} }
+    if (rec === r && listening && !speaking) { try { rec.start(); } catch {} }
   };
 
   listening = true;
@@ -199,6 +239,8 @@ function stop() {
   buffer?.clear();
   window.speechSynthesis?.cancel();
   rec?.stop();
+  rec = null;
+  whisper.stop();
   clearInterim();
   mic.classList.remove('rec');
   mic.textContent = '🎤';
@@ -208,6 +250,7 @@ function stop() {
 mic.onclick = () => {
   // iOS only allows speech output after a tap, so unlock it here.
   if (!listening && ttsOn) unlockSpeech();
+  whisper.prime();
   listening ? stop() : start();
 };
 

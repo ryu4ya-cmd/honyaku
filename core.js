@@ -144,22 +144,30 @@ function makeSentenceBuffer(onFlush) {
   };
 }
 
-// Accent of the English recognizer. Matching it to the speaker helps
-// recognition of non-native English.
-const ACCENTS = [
-  ['en-US', 'US'], ['en-GB', 'UK'], ['en-AU', 'Australia'],
-  ['en-IN', 'India'], ['en-SG', 'Singapore'], ['en-PH', 'Philippines'],
+// How English is recognized: 'whisper' (on-device AI, best with accents) or
+// the iPhone's recognizer with a chosen accent.
+const EN_MODES = [
+  ['whisper', 'High accuracy (AI)'],
+  ['en-US', 'iPhone: English (US)'], ['en-GB', 'iPhone: English (UK)'],
+  ['en-AU', 'iPhone: English (Australia)'], ['en-IN', 'iPhone: English (India)'],
+  ['en-SG', 'iPhone: English (Singapore)'], ['en-PH', 'iPhone: English (Philippines)'],
 ];
 
-function getAccent() {
-  try { return localStorage.getItem('accent') || 'en-US'; } catch { return 'en-US'; }
+function getEnMode() {
+  let mode = null;
+  try { mode = localStorage.getItem('enMode'); } catch {}
+  if (mode === 'whisper' && !window.WebAssembly) mode = null;
+  return EN_MODES.some(([code]) => code === mode) ? mode : 'whisper';
 }
 
-function setupAccentSelect(select, onChange) {
-  for (const [code, name] of ACCENTS) select.add(new Option('English (' + name + ')', code));
-  select.value = getAccent();
+// Language code for the iPhone recognizer (used when Whisper is off).
+function systemEnLang(mode) { return mode === 'whisper' ? 'en-US' : mode; }
+
+function setupEnModeSelect(select, onChange) {
+  for (const [code, name] of EN_MODES) select.add(new Option(name, code));
+  select.value = getEnMode();
   select.onchange = () => {
-    try { localStorage.setItem('accent', select.value); } catch {}
+    try { localStorage.setItem('enMode', select.value); } catch {}
     onChange?.(select.value);
   };
 }

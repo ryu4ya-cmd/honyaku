@@ -80,6 +80,7 @@
 </section>
 
 <script src="core.js"></script>
+<script src="whisper.js"></script>
 <script>
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const SIDES = {
@@ -97,11 +98,40 @@ const buffer = makeSentenceBuffer((text, lang) => {
   clearInterim();
   if (!busy && turn) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
 });
-SIDES.en.rec = getAccent();
-setupAccentSelect(document.getElementById('accent'), (code) => {
-  SIDES.en.rec = code;
+let enMode = getEnMode();
+SIDES.en.rec = systemEnLang(enMode);
+setupEnModeSelect(document.getElementById('accent'), (mode) => {
+  enMode = mode;
+  SIDES.en.rec = systemEnLang(mode);
+  if (mode === 'whisper') whisper.preload();
   if (turn === 'en' && !busy) listen();
 });
+
+const whisper = createWhisperListener({
+  onState(state, info) {
+    if (enMode !== 'whisper') return;
+    if (state === 'error') {
+      // Fall back to the iPhone recognizer so the conversation can go on.
+      statusEl.textContent = 'AI認識エラー：標準の認識に切り替えます';
+      enMode = 'en-US';
+      SIDES.en.rec = 'en-US';
+      document.getElementById('accent').value = 'en-US';
+      render();
+      if (turn === 'en' && !busy) listen();
+      return;
+    }
+    if (turn !== 'en') return;
+    const hint = SIDES.en.el.querySelector('.hint');
+    if (state === 'loading') hint.textContent = 'Loading AI model… ' + (info || 0) + '%';
+    else if (state === 'listening') { hint.textContent = SIDES.en.active; clearInterim(); }
+    else if (state === 'hearing') showInterim('en', '🎙 …');
+    else if (state === 'transcribing') showInterim('en', '…');
+  },
+  onResult(text) {
+    if (!busy && turn === 'en') handleFinal('en', text);
+  },
+});
+if (enMode === 'whisper') whisper.preload();
 
 function logOf(lang) { return SIDES[lang].el.querySelector('.log'); }
 
@@ -147,7 +177,10 @@ function looksEnglish(text) {
 function listen() {
   if (!turn) return;
   rec?.abort();
+  rec = null;
+  whisper.stop();
   const lang = turn;
+  if (lang === 'en' && enMode === 'whisper') { whisper.start(); return; }
   const r = rec = new SR();
   rec.lang = SIDES[lang].rec;
   rec.interimResults = true;
@@ -187,6 +220,7 @@ async function handleFinal(from, text) {
   const to = SIDES[from].other;
   busy = true;
   rec?.abort();
+  whisper.stop();
   const { shown, query } = prepareText(text, from);
   addMsg(from, shown, true);
   const out = addMsg(to, '…', false);
@@ -220,6 +254,7 @@ function stopAll() {
   busy = false;
   rec?.abort();
   rec = null;
+  whisper.stop();
   window.speechSynthesis?.cancel();
   clearInterim();
   render();
@@ -230,6 +265,7 @@ for (const lang of ['ja', 'en']) {
     if (!SR) { statusEl.textContent = 'iPhoneのSafariで開いてください'; return; }
     if (turn === lang) return stopAll();
     unlockSpeech();
+    whisper.prime();
     window.speechSynthesis?.cancel();
     busy = false;
     buffer.clear();
