@@ -45,6 +45,7 @@
   .src { color: var(--muted); font-size: 14px; }
   .dst { font-size: 20px; margin-top: 4px; }
   .interim { color: var(--muted); font-style: italic; }
+  .item.refined { outline: 2px solid var(--accent); }
   #status { text-align: center; color: var(--muted); font-size: 13px; min-height: 1.4em; }
   .accent {
     display: block; margin: 0 auto; font-size: 14px; color: var(--text);
@@ -124,7 +125,19 @@ const whisper = createWhisperListener({
     else if (state === 'hearing') showInterim('🎙 …');
     else if (state === 'transcribing') showInterim('…');
   },
-  onResult(text) { if (listening && useWhisper()) handleText(text); },
+  onResult(text, id) { if (listening && useWhisper()) handleText(text, id); },
+  // The accurate model heard something different: fix the line and its translation.
+  async onRefine(id, text) {
+    const item = itemById[id];
+    delete itemById[id];
+    if (!item || !differentWords(item.text, text)) return;
+    const { shown, query } = prepareText(text, 'en');
+    item.el.querySelector('.src').textContent = shown;
+    try {
+      item.el.querySelector('.dst').textContent = await translate(query, 'en', 'ja') + '（修正）';
+      item.el.classList.add('refined');
+    } catch {}
+  },
 });
 if (enMode === 'whisper') whisper.preload();
 
@@ -138,8 +151,10 @@ function addItem(src) {
   div.querySelector('.src').textContent = src;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
-  return div.querySelector('.dst');
+  return div;
 }
+
+const itemById = {};
 
 function showInterim(text) {
   log.querySelector('.empty')?.remove();
@@ -186,13 +201,15 @@ function speak(text, lang) {
 
 function start() {
   const { from, to, voice } = LANGS[current];
-  handleText = (text) => {
+  handleText = (text, id) => {
     preview?.cancel();
     clearInterim();
     // Drop Safari's late final result for these same words.
     if (rec) { rec.abort(); }
     const { shown, query } = prepareText(text, from);
-    const dst = addItem(shown);
+    const item = addItem(shown);
+    const dst = item.querySelector('.dst');
+    if (id !== undefined) itemById[id] = { text, el: item };
     translate(query, from, to)
       .then(t => { dst.textContent = t; speak(t, voice); })
       .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });

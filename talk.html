@@ -36,6 +36,7 @@
   .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-size: 18px; }
   .msg.mine { align-self: flex-end; background: var(--mine); font-size: 15px; }
   .msg.interim { color: var(--muted); font-style: italic; }
+  .msg.refined { outline: 2px solid var(--accent); }
   .bar { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
   .hint { flex: 1; color: var(--muted); font-size: 14px; }
   .side.turn .hint { color: var(--rec); font-weight: 600; }
@@ -129,8 +130,20 @@ const whisper = createWhisperListener({
     else if (state === 'hearing') showInterim('en', '🎙 …');
     else if (state === 'transcribing') showInterim('en', '…');
   },
-  onResult(text) {
-    if (!busy && turn === 'en') handleFinal('en', text);
+  onResult(text, id) {
+    if (!busy && turn === 'en') handleFinal('en', text, id);
+  },
+  // The accurate model heard something different: fix the message and its translation.
+  async onRefine(id, text) {
+    const sent = sentById[id];
+    delete sentById[id];
+    if (!sent || !differentWords(sent.text, text)) return;
+    const { shown, query } = prepareText(text, 'en');
+    sent.mine.textContent = shown;
+    try {
+      sent.out.textContent = await translate(query, 'en', 'ja') + '（修正）';
+      sent.out.classList.add('refined');
+    } catch {}
   },
 });
 if (enMode === 'whisper') whisper.preload();
@@ -223,14 +236,17 @@ function listen() {
   try { rec.start(); } catch {}
 }
 
-async function handleFinal(from, text) {
+const sentById = {};
+
+async function handleFinal(from, text, id) {
   const to = SIDES[from].other;
   busy = true;
   rec?.abort();
   whisper.stop();
   const { shown, query } = prepareText(text, from);
-  addMsg(from, shown, true);
+  const mine = addMsg(from, shown, true);
   const out = addMsg(to, '…', false);
+  if (id !== undefined) sentById[id] = { text, mine, out };
   let translated = '';
   try {
     translated = await translate(query, from, to);

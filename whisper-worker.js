@@ -4,8 +4,10 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 
 env.allowLocalModels = false;
 
-// tiny.en is about 3x faster than base.en on a phone, which matters more in conversation.
-const MODEL = 'Xenova/whisper-tiny.en';
+// Two copies run side by side: tiny.en answers fast, base.en (about 3x
+// slower, more accurate) re-checks each sentence afterwards.
+const MODELS = { fast: 'Xenova/whisper-tiny.en', accurate: 'Xenova/whisper-base.en' };
+const MODEL = MODELS[new URL(self.location.href).searchParams.get('model')] || MODELS.fast;
 let asr = null;
 const files = {};
 

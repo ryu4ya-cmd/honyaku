@@ -36,8 +36,11 @@ function cleanTranscript(text, ms) {
   return t;
 }
 
-function createWhisperListener({ onState, onResult }) {
+// onResult(text, id) gets the fast transcript; onRefine(id, text) later gets
+// the accurate model's transcript of the same audio.
+function createWhisperListener({ onState, onResult, onRefine }) {
   let worker = null;
+  let accurate = null;
   let ready = false;
   let ctx = null, stream = null, source = null, proc = null;
   let active = false;
@@ -51,20 +54,37 @@ function createWhisperListener({ onState, onResult }) {
 
   function ensureWorker() {
     if (worker) return;
-    worker = new Worker('whisper-worker.js', { type: 'module' });
+    worker = new Worker('whisper-worker.js?model=fast', { type: 'module' });
     worker.onmessage = (e) => {
       const m = e.data;
       if (m.type === 'progress') onState('loading', m.percent);
-      else if (m.type === 'ready') { ready = true; onState(active ? 'listening' : 'ready'); }
-      else if (m.type === 'result') {
+      else if (m.type === 'ready') {
+        ready = true;
+        onState(active ? 'listening' : 'ready');
+        startAccurate();
+      } else if (m.type === 'result') {
         const text = cleanTranscript(m.text, durations[m.id] || 0);
-        delete durations[m.id];
         if (active) onState('listening');
-        if (text && active) onResult(text);
+        if (text && active) onResult(text, m.id);
+        else delete durations[m.id];
       } else if (m.type === 'error') fail(m.message);
     };
     worker.onerror = (e) => fail(e.message || 'worker error');
     worker.postMessage({ type: 'load' });
+  }
+
+  // Load the accurate model only after the fast one, so it doesn't slow the first download.
+  function startAccurate() {
+    if (accurate || !onRefine) return;
+    accurate = new Worker('whisper-worker.js?model=accurate', { type: 'module' });
+    accurate.onmessage = (e) => {
+      const m = e.data;
+      if (m.type !== 'result') return;
+      const text = cleanTranscript(m.text, durations[m.id] || 0);
+      delete durations[m.id];
+      if (text) onRefine(m.id, text);
+    };
+    accurate.postMessage({ type: 'load' });
   }
 
   function fail(message) {
@@ -84,6 +104,7 @@ function createWhisperListener({ onState, onResult }) {
     const id = nextId++;
     durations[id] = ms;
     onState('transcribing');
+    accurate?.postMessage({ type: 'transcribe', id, audio: audio.slice() });
     worker.postMessage({ type: 'transcribe', id, audio }, [audio.buffer]);
   }
 

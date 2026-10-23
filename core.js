@@ -91,6 +91,13 @@ function addQuestionMark(text, lang) {
   return text;
 }
 
+// Whether the accurate transcript differs from the fast one in more than
+// punctuation or capitalization.
+function differentWords(a, b) {
+  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9' ]/g, '').replace(/\s+/g, ' ').trim();
+  return norm(a) !== norm(b);
+}
+
 // Turn a raw recognition result into what to show and what to translate.
 function prepareText(text, from) {
   // Show what was said, but translate the standard-Japanese version.
