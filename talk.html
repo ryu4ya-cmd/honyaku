@@ -80,6 +80,10 @@
     <h2>設定</h2>
     <label class="switch"><span><b>訳を読み上げる</b></span><input id="tts" type="checkbox" checked></label>
     <label class="field">
+      <span>読み上げの速さ</span>
+      <select id="rate"></select>
+    </label>
+    <label class="field">
       <span>英語の聞き取り方式</span>
       <select id="accent"></select>
       <small>なまりのある英語は「AI・高精度」がおすすめです。動きが重いときは「AI・軽量」にしてください。</small>
@@ -113,7 +117,7 @@ const buffer = makeSentenceBuffer((text, lang) => {
   preview?.cancel();
   clearInterim();
   if (!busy && turn) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
-});
+}, () => { try { rec?.stop(); } catch {} });  // on a pause, ask Safari for its more accurate final text
 let enMode = getEnMode();
 SIDES.en.rec = systemEnLang(enMode);
 setupEnModeSelect(document.getElementById('accent'), (mode) => {
@@ -384,6 +388,7 @@ document.getElementById('tts').onchange = (e) => {
   ttsOn = e.target.checked;
   if (!ttsOn) window.speechSynthesis?.cancel();
 };
+setupRateSelect(document.getElementById('rate'));
 render();
 </script>
 </body>

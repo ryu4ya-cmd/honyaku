@@ -73,6 +73,10 @@
     <h2>設定</h2>
     <label class="switch"><span><b>訳を読み上げる</b></span><input id="tts" type="checkbox" checked></label>
     <label class="field">
+      <span>読み上げの速さ</span>
+      <select id="rate"></select>
+    </label>
+    <label class="field">
       <span>英語の聞き取り方式</span>
       <select id="accent"></select>
       <small>なまりのある英語は「AI・高精度」がおすすめです。初回のみAIのダウンロード（Wi-Fi推奨）があります。</small>
@@ -180,6 +184,16 @@ function addItem(src, voice) {
 
 const itemById = {};
 
+// Safari can deliver the final result for words we already translated
+// (from the in-progress text) a moment later; don't translate them twice.
+let lastFlush = null;
+function isLateDuplicate(text) {
+  if (!lastFlush || Date.now() - lastFlush.at > 4000) return false;
+  const norm = (s) => s.replace(/[\s、。,.!?？！]/g, '').toLowerCase();
+  const a = norm(text), b = norm(lastFlush.text);
+  return a === b || b.includes(a) || a.includes(b);
+}
+
 function showInterim(text) {
   log.querySelector('.guide')?.remove();
   if (!interimEl) {
@@ -244,7 +258,8 @@ function start() {
     preview?.cancel();
     clearInterim();
     // Drop Safari's late final result for these same words.
-    if (rec) { rec.abort(); }
+    lastFlush = { text, at: Date.now() };
+    if (rec) rec.abort();
     const { shown, query } = prepareText(text, from);
     const item = addItem(shown, voice);
     const dst = item.querySelector('.dst');
@@ -267,7 +282,8 @@ function start() {
   rec.interimResults = true;
   rec.continuous = true;
   buffer?.clear();
-  buffer = makeSentenceBuffer(handleText);
+  // On a pause, ask Safari to finish so we get its more accurate final text.
+  buffer = makeSentenceBuffer(handleText, () => { try { rec?.stop(); } catch {} });
   preview?.cancel();
   preview = makeLivePreview(from, to, (t) => showPreview(t));
 
@@ -277,7 +293,7 @@ function start() {
       const r = e.results[i];
       const text = r[0].transcript.trim();
       if (r.isFinal) {
-        if (text) buffer.final(text, from);
+        if (text && !isLateDuplicate(text)) buffer.final(text, from);
       } else {
         interim += text;
       }
@@ -348,6 +364,7 @@ document.getElementById('tts').onchange = (e) => {
   if (!ttsOn) window.speechSynthesis?.cancel();
 };
 
+setupRateSelect(document.getElementById('rate'));
 renderDirection();
 </script>
 </body>

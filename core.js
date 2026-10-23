@@ -68,47 +68,76 @@ function unlockSpeech() {
   if (window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
 }
 
+// Speed of the read-aloud voice, chosen in settings.
+const SPEECH_RATES = [['0.75', 'ゆっくり'], ['0.9', 'ふつう'], ['1.05', '少し速め']];
+
+function getSpeechRate() {
+  try { return localStorage.getItem('speechRate') || '0.9'; } catch { return '0.9'; }
+}
+
+function setupRateSelect(select) {
+  for (const [v, name] of SPEECH_RATES) select.add(new Option(name, v));
+  select.value = getSpeechRate();
+  select.onchange = () => { try { localStorage.setItem('speechRate', select.value); } catch {} };
+}
+
 function pickVoice(utterance, lang) {
   utterance.lang = lang;
-  utterance.rate = 1.15;  // a little faster keeps the conversation moving
+  utterance.rate = Number(getSpeechRate());
   const voice = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-') === lang);
   if (voice) utterance.voice = voice;
 }
 
 
 // Decide when the speaker has finished. Safari is slow to mark a result as
-// final, so we don't wait for that: once no new words have arrived for a short
-// pause, the sentence (finished pieces plus the words still in progress) is
-// done. Callers must abort the recognizer after a flush so Safari's late
-// final result for the same words isn't used twice.
-const PAUSE_MS = { ja: 800, en: 1000 };
+// final, so once no new words have arrived for a short pause we ask the
+// recognizer to finish (onPause, which calls rec.stop()). Its final result is
+// more accurate than the words shown while speaking, so we translate that.
+// If the final result doesn't come quickly, the words so far are used.
+const PAUSE_MS = { ja: 900, en: 1000 };
+const FINAL_WAIT_MS = 700;
 
-function makeSentenceBuffer(onFlush) {
+function makeSentenceBuffer(onFlush, onPause) {
   let parts = [];
   let pending = '';
   let lang = null;
   let timer = null;
+  let finishing = false;
   const join = () => [...parts, pending].filter(Boolean).join(lang === 'ja' ? '' : ' ').trim();
   const flush = () => {
+    clearTimeout(timer);
     timer = null;
+    finishing = false;
     const text = join();
     const l = lang;
     parts = [];
     pending = '';
     if (text) onFlush(text, l);
   };
+  const paused = () => {
+    timer = null;
+    if (pending && onPause && !finishing) {
+      finishing = true;
+      onPause();
+      timer = setTimeout(flush, FINAL_WAIT_MS);
+    } else {
+      flush();
+    }
+  };
   const arm = () => {
     clearTimeout(timer);
-    timer = setTimeout(flush, PAUSE_MS[lang] || 900);
+    timer = setTimeout(paused, PAUSE_MS[lang] || 900);
   };
   return {
     final(text, l) {
       lang = l;
       parts.push(text);
       pending = '';
-      arm();
+      // We asked for this final result: the sentence is done.
+      if (finishing) flush(); else arm();
     },
     interim(text, l) {
+      if (finishing) return;
       lang = l;
       pending = text;
       arm();
@@ -116,7 +145,7 @@ function makeSentenceBuffer(onFlush) {
     // The recognizer restarted: keep waiting for the pause.
     rearm() { if ((parts.length || pending) && !timer) arm(); },
     text: join,
-    clear() { clearTimeout(timer); timer = null; parts = []; pending = ''; },
+    clear() { clearTimeout(timer); timer = null; parts = []; pending = ''; finishing = false; },
   };
 }
 
