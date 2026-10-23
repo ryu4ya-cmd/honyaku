@@ -39,7 +39,7 @@ function cleanTranscript(text, ms) {
 // onResult(text, id) gets the fast transcript; onRefine(id, text) later gets
 // the accurate model's transcript of the same audio.
 function createWhisperListener({ onState: report, onResult, onRefine }) {
-  let refineOn = true;
+  let refineOn = canRefine();
   const onState = (state, info) => {
     if (state !== 'loading' && state !== 'hearing') debugLog('whisper: ' + state + (info ? ' ' + info : ''), state === 'error');
     report(state, info);
@@ -160,7 +160,7 @@ function createWhisperListener({ onState: report, onResult, onRefine }) {
     preload() { ensureWorker(); },
     // Turn the background accuracy check on or off (off saves memory).
     setRefine(on) {
-      refineOn = on;
+      refineOn = on && canRefine();
       if (on) { if (ready) startAccurate(); }
       else if (accurate) { accurate.terminate(); accurate = null; }
     },
