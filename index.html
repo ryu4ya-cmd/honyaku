@@ -137,6 +137,23 @@ async function translate(text, from, to) {
   }
 }
 
+// Speech recognition drops punctuation, so a spoken question loses its "?"
+// and gets translated as a statement. Guess questions from wording and add it back.
+const JA_Q_END = /(か|かな|かね|かしら|っけ|でしょう|だろう|の|んですか|ますか)$/;
+const JA_Q_WORD = /(何|なに|なん|どこ|いつ|誰|だれ|どう|なぜ|どうして|いくら|どれ|どちら|どっち|どの|いくつ)/;
+const EN_Q_START = /^(do|does|did|is|are|was|were|am|can|could|will|would|should|shall|may|might|must|have|has|had|what|where|when|why|who|whom|whose|which|how|isn't|aren't|wasn't|weren't|don't|doesn't|didn't|can't|couldn't|won't|wouldn't|shouldn't|haven't|hasn't)\b/i;
+const EN_Q_END = /\b(right|okay|ok|isn't it|aren't you|don't you|didn't you|won't you|can't you)$/i;
+
+function addQuestionMark(text, lang) {
+  if (/[?？。.!！]$/.test(text)) return text;
+  if (lang === 'ja') {
+    if (JA_Q_END.test(text) || (JA_Q_WORD.test(text) && /(だ|です|ん|の|何|なに|なん|どこ|いつ|誰|だれ|どう|なぜ|どうして|いくら|どれ|どちら|どっち|いくつ)$/.test(text))) return text + '？';
+  } else if (EN_Q_START.test(text) || EN_Q_END.test(text)) {
+    return text + '?';
+  }
+  return text;
+}
+
 function speak(text, lang) {
   if (!ttsOn || !window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
@@ -171,8 +188,9 @@ function start() {
       if (r.isFinal) {
         clearInterim();
         if (!text) continue;
-        const dst = addItem(text);
-        translate(text, from, to)
+        const src = addQuestionMark(text, from);
+        const dst = addItem(src);
+        translate(src, from, to)
           .then(t => { dst.textContent = t; speak(t, voice); })
           .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
       } else {
