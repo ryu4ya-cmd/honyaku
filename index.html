@@ -33,6 +33,12 @@
     border: 0; background: transparent; color: var(--text); padding: 8px 14px; font-size: 14px;
   }
   .lang button.on { background: var(--accent); color: #fff; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  #tts {
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+    border-radius: 999px; padding: 6px 10px; font-size: 16px;
+  }
+  #tts.on { background: var(--accent); color: #fff; border-color: var(--accent); }
   #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
   .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
   .src { color: var(--muted); font-size: 14px; }
@@ -50,9 +56,12 @@
 <body>
 <header>
   <h1>リアルタイム翻訳</h1>
-  <div class="lang" role="group" aria-label="話す言語">
-    <button id="ja" class="on">日本語→英語</button>
-    <button id="en">英語→日本語</button>
+  <div class="controls">
+    <button id="tts" class="on" aria-label="読み上げ">🔊</button>
+    <div class="lang" role="group" aria-label="話す言語">
+      <button id="ja" class="on">日→英</button>
+      <button id="en">英→日</button>
+    </div>
   </div>
 </header>
 <div id="log"><p class="empty">マイクボタンを押して話してください</p></div>
@@ -64,11 +73,16 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const log = document.getElementById('log');
 const statusEl = document.getElementById('status');
 const mic = document.getElementById('mic');
-const LANGS = { ja: { rec: 'ja-JP', pair: 'ja|en' }, en: { rec: 'en-US', pair: 'en|ja' } };
+const LANGS = {
+  ja: { rec: 'ja-JP', from: 'ja', to: 'en', voice: 'en-US' },
+  en: { rec: 'en-US', from: 'en', to: 'ja', voice: 'ja-JP' },
+};
 let current = 'ja';
 let rec = null;
 let listening = false;
 let interimEl = null;
+let ttsOn = true;
+let speaking = 0;
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -96,16 +110,49 @@ function showInterim(text) {
 
 function clearInterim() { interimEl?.remove(); interimEl = null; }
 
-async function translate(text, pair) {
-  // MyMemory: free, no key. Max ~500 bytes per request.
+async function translateGoogle(text, from, to) {
+  // Google Translate free web endpoint: no key, much better ja<->en quality.
+  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t' +
+    '&sl=' + from + '&tl=' + to + '&q=' + encodeURIComponent(text);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return data[0].map(seg => seg[0]).join('');
+}
+
+async function translateMyMemory(text, from, to) {
   const url = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) +
-    '&langpair=' + encodeURIComponent(pair);
+    '&langpair=' + from + '|' + to;
   const res = await fetch(url);
   const data = await res.json();
-  if (data.responseStatus !== 200 && data.responseStatus !== '200') {
-    throw new Error(data.responseDetails || 'translation failed');
-  }
+  if (String(data.responseStatus) !== '200') throw new Error(data.responseDetails || 'translation failed');
   return data.responseData.translatedText;
+}
+
+async function translate(text, from, to) {
+  try {
+    return await translateGoogle(text, from, to);
+  } catch (e) {
+    return await translateMyMemory(text, from, to);
+  }
+}
+
+function speak(text, lang) {
+  if (!ttsOn || !window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang;
+  const voice = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-') === lang);
+  if (voice) u.voice = voice;
+  // Pause the mic while speaking so the app doesn't hear its own voice.
+  speaking++;
+  rec?.abort();
+  const done = () => {
+    speaking = Math.max(0, speaking - 1);
+    if (!speaking && listening) { try { rec.start(); } catch {} }
+  };
+  u.onend = done;
+  u.onerror = done;
+  speechSynthesis.speak(u);
 }
 
 function start() {
@@ -114,7 +161,7 @@ function start() {
   rec.lang = LANGS[current].rec;
   rec.interimResults = true;
   rec.continuous = true;
-  const pair = LANGS[current].pair;
+  const { from, to, voice } = LANGS[current];
 
   rec.onresult = (e) => {
     let interim = '';
@@ -125,8 +172,8 @@ function start() {
         clearInterim();
         if (!text) continue;
         const dst = addItem(text);
-        translate(text, pair)
-          .then(t => { dst.textContent = t; })
+        translate(text, from, to)
+          .then(t => { dst.textContent = t; speak(t, voice); })
           .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
       } else {
         interim += text;
@@ -143,7 +190,7 @@ function start() {
     }
   };
   // Safari stops recognition after a pause, so restart while still listening.
-  rec.onend = () => { if (listening) { try { rec.start(); } catch {} } };
+  rec.onend = () => { if (listening && !speaking) { try { rec.start(); } catch {} } };
 
   listening = true;
   rec.start();
@@ -154,6 +201,8 @@ function start() {
 
 function stop() {
   listening = false;
+  speaking = 0;
+  window.speechSynthesis?.cancel();
   rec?.stop();
   clearInterim();
   mic.classList.remove('rec');
@@ -161,7 +210,19 @@ function stop() {
   setStatus('');
 }
 
-mic.onclick = () => listening ? stop() : start();
+mic.onclick = () => {
+  // iOS only allows speech output after a tap, so unlock it here.
+  if (!listening && ttsOn && window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  listening ? stop() : start();
+};
+
+const ttsBtn = document.getElementById('tts');
+ttsBtn.onclick = () => {
+  ttsOn = !ttsOn;
+  ttsBtn.classList.toggle('on', ttsOn);
+  ttsBtn.textContent = ttsOn ? '🔊' : '🔇';
+  if (!ttsOn) window.speechSynthesis?.cancel();
+};
 
 for (const id of ['ja', 'en']) {
   document.getElementById(id).onclick = () => {
