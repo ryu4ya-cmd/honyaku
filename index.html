@@ -5,77 +5,83 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ほんやく">
-<meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>リアルタイム翻訳</title>
+<link rel="stylesheet" href="style.css">
+<title>ほんやく</title>
 <style>
-  :root {
-    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
-    --accent: #2563eb; --rec: #dc2626; --border: #e2e8f0;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0b1120; --card: #111827; --text: #f1f5f9; --muted: #94a3b8; --border: #1f2937; }
-  }
-  * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
     display: flex; flex-direction: column; height: 100dvh;
-    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    padding: env(safe-area-inset-top) 16px 0;
   }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
-  h1 { font-size: 18px; margin: 0; }
-  .lang {
-    display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden;
+  .direction {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 10px; box-shadow: var(--shadow);
   }
-  .lang button {
-    border: 0; background: transparent; color: var(--text); padding: 8px 14px; font-size: 14px;
+  .lang-box { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .lang-box .label { font-size: 12px; color: var(--muted); }
+  .lang-box .name { font-size: 18px; font-weight: 700; }
+  .swap {
+    width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent-soft); color: var(--accent);
+    font-size: 22px; font-weight: 700;
   }
-  .lang button.on { background: var(--accent); color: #fff; }
-  #talk { color: var(--accent); font-size: 14px; text-decoration: none; }
-  .controls { display: flex; gap: 8px; align-items: center; }
-  #tts {
-    border: 1px solid var(--border); background: transparent; color: var(--text);
-    border-radius: 999px; padding: 6px 10px; font-size: 16px;
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
+  .guide {
+    margin: auto 0; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px;
   }
-  #tts.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 12px; }
-  .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
-  .src { color: var(--muted); font-size: 14px; }
-  .dst { font-size: 20px; margin-top: 4px; }
-  .interim { color: var(--muted); font-style: italic; }
-  .item.refined { outline: 2px solid var(--accent); }
-  #status { text-align: center; color: var(--muted); font-size: 13px; min-height: 1.4em; }
-  .accent {
-    display: block; margin: 0 auto; font-size: 14px; color: var(--text);
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
+  .guide b { font-size: 16px; }
+  .guide ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.9; font-size: 15px; }
+  .bottom {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 8px 0 calc(12px + env(safe-area-inset-bottom));
   }
-  #mic {
-    margin: 8px auto 16px; width: 72px; height: 72px; border-radius: 50%; border: 0;
-    background: var(--accent); color: #fff; font-size: 30px;
-  }
-  #mic.rec { background: var(--rec); }
-  .empty { color: var(--muted); text-align: center; margin-top: 30vh; }
 </style>
 </head>
 <body>
-<header>
-  <h1>リアルタイム翻訳</h1>
-  <a id="talk" href="talk.html">対面モード</a>
-  <div class="controls">
-    <button id="tts" class="on" aria-label="読み上げ">🔊</button>
-    <div class="lang" role="group" aria-label="話す言語">
-      <button id="ja" class="on">日→英</button>
-      <button id="en">英→日</button>
-    </div>
-  </div>
+<header class="top">
+  <div class="brand">ほんやく</div>
+  <nav class="tabs"><div class="seg"><a class="on" href="./">ひとりで</a><a href="talk.html">ふたりで会話</a></div></nav>
+  <button id="settings-btn" class="icon-btn" aria-label="設定">⚙️</button>
 </header>
-<div id="log"><p class="empty">マイクボタンを押して話してください</p></div>
-<div id="status"></div>
-<select id="accent" class="accent" aria-label="英語のなまり"></select>
-<button id="mic" aria-label="録音開始">🎤</button>
 
+<section class="direction" aria-label="翻訳の向き">
+  <div class="lang-box"><span class="label">話す言葉</span><span id="from-name" class="name"></span></div>
+  <button id="swap" class="swap" aria-label="話す言葉と訳す言葉を入れ替える">⇄</button>
+  <div class="lang-box"><span class="label">訳す言葉</span><span id="to-name" class="name"></span></div>
+</section>
+
+<main id="log" aria-live="polite">
+  <div class="guide">
+    <b>使い方</b>
+    <ol>
+      <li>上で「話す言葉」を確認（⇄ で入れ替え）</li>
+      <li>下のマイクを押して話す</li>
+      <li>訳が大きく表示され、読み上げられます</li>
+    </ol>
+  </div>
+</main>
+
+<footer class="bottom">
+  <div id="status" class="status">待機中</div>
+  <button id="mic" class="mic" aria-label="話し始める">🎤</button>
+  <div id="mic-label" class="mic-label">タップして話す</div>
+</footer>
+
+<div id="sheet-bg" class="sheet-bg" hidden>
+  <div class="sheet" role="dialog" aria-label="設定">
+    <h2>設定</h2>
+    <label class="switch"><span><b>訳を読み上げる</b></span><input id="tts" type="checkbox" checked></label>
+    <label class="field">
+      <span>英語の聞き取り方式</span>
+      <select id="accent"></select>
+      <small>なまりのある英語は「AI・高精度」がおすすめです。初回のみAIのダウンロード（Wi-Fi推奨）があります。</small>
+    </label>
+    <button id="sheet-close" class="primary">閉じる</button>
+  </div>
+</div>
+
+<script src="dictionaries.js"></script>
 <script src="core.js"></script>
 <script src="whisper.js"></script>
 <script>
@@ -83,9 +89,10 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const log = document.getElementById('log');
 const statusEl = document.getElementById('status');
 const mic = document.getElementById('mic');
+const micLabel = document.getElementById('mic-label');
 const LANGS = {
-  ja: { rec: 'ja-JP', from: 'ja', to: 'en', voice: 'en-US' },
-  en: { rec: 'en-US', from: 'en', to: 'ja', voice: 'ja-JP' },
+  ja: { rec: 'ja-JP', from: 'ja', to: 'en', voice: 'en-US', name: '🇯🇵 日本語' },
+  en: { rec: 'en-US', from: 'en', to: 'ja', voice: 'ja-JP', name: '🇺🇸 英語' },
 };
 let current = 'ja';
 let rec = null;
@@ -109,22 +116,33 @@ let previewEl = null;
 
 function useWhisper() { return current === 'en' && isWhisper(enMode); }
 
+// kind: idle | listening | working | speaking | loading | error
+function setStatus(text, kind = 'idle') {
+  statusEl.textContent = text;
+  statusEl.className = 'status ' + kind;
+}
+
+function listeningStatus() {
+  if (!listening) return setStatus('待機中');
+  setStatus(LANGS[current].name.split(' ')[1] + 'を聞いています', 'listening');
+}
+
 const whisper = createWhisperListener({
   onState(state, info) {
     if (!isWhisper(enMode)) return;
     if (state === 'error') {
-      setStatus('AI認識エラー：標準の認識に切り替えました');
       enMode = 'en-US';
       LANGS.en.rec = 'en-US';
       document.getElementById('accent').value = 'en-US';
-      if (listening && current === 'en') { stop(); start(); setStatus('AI認識エラー：標準の認識に切り替えました'); }
+      if (listening && current === 'en') { stop(); start(); }
+      setStatus('AIが使えないため標準の聞き取りに切り替えました', 'error');
       return;
     }
     if (!listening || !useWhisper()) return;
-    if (state === 'loading') setStatus('AIモデルを読み込み中… ' + (info || 0) + '%（初回のみ）');
-    else if (state === 'listening') { setStatus('聞き取り中…（AI）'); clearInterim(); }
+    if (state === 'loading') setStatus('AIを準備中 ' + (info || 0) + '%（初回のみ）', 'loading');
+    else if (state === 'listening') { listeningStatus(); clearInterim(); }
     else if (state === 'hearing') showInterim('🎙 …');
-    else if (state === 'transcribing') showInterim('…');
+    else if (state === 'transcribing') { showInterim('…'); setStatus('聞き取った内容を変換中', 'working'); }
   },
   onResult(text, id) { if (listening && useWhisper()) handleText(text, id); },
   // The accurate model heard something different: fix the line and its translation.
@@ -135,7 +153,10 @@ const whisper = createWhisperListener({
     const { shown, query } = prepareText(text, 'en');
     item.el.querySelector('.src').textContent = shown;
     try {
-      item.el.querySelector('.dst').textContent = await translate(query, 'en', 'ja') + '（修正）';
+      const t = await translate(query, 'en', 'ja');
+      item.el.querySelector('.dst').innerHTML = '';
+      item.el.querySelector('.dst').append(t, Object.assign(document.createElement('span'), { className: 'badge', textContent: '修正済み' }));
+      item.el.dataset.say = t;
       item.el.classList.add('refined');
     } catch {}
   },
@@ -143,31 +164,32 @@ const whisper = createWhisperListener({
 whisper.setRefine(enMode === 'whisper');
 if (isWhisper(enMode)) whisper.preload();
 
-function setStatus(t) { statusEl.textContent = t; }
+function scrollDown() { log.scrollTop = log.scrollHeight; }
 
-function addItem(src) {
-  log.querySelector('.empty')?.remove();
+function addItem(src, voice) {
+  log.querySelector('.guide')?.remove();
   const div = document.createElement('div');
-  div.className = 'item';
-  div.innerHTML = '<div class="src"></div><div class="dst">…</div>';
+  div.className = 'card';
+  div.innerHTML = '<div class="src"></div><div class="dst">…</div><button class="replay" aria-label="もう一度読み上げる">🔊</button>';
   div.querySelector('.src').textContent = src;
+  div.querySelector('.replay').onclick = () => { if (div.dataset.say) speak(div.dataset.say, voice, true); };
   log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
+  scrollDown();
   return div;
 }
 
 const itemById = {};
 
 function showInterim(text) {
-  log.querySelector('.empty')?.remove();
+  log.querySelector('.guide')?.remove();
   if (!interimEl) {
     interimEl = document.createElement('div');
-    interimEl.className = 'item interim';
+    interimEl.className = 'card interim';
     interimEl.innerHTML = '<div class="src"></div>';
     log.appendChild(interimEl);
   }
   interimEl.querySelector('.src').textContent = text;
-  log.scrollTop = log.scrollHeight;
+  scrollDown();
 }
 
 function clearInterim() { interimEl?.remove(); interimEl = null; previewEl = null; }
@@ -180,25 +202,40 @@ function showPreview(text) {
     interimEl.appendChild(previewEl);
   }
   previewEl.textContent = text;
+  scrollDown();
 }
 
-function speak(text, lang) {
-  if (!ttsOn || !window.speechSynthesis) return;
+function speak(text, lang, force) {
+  if ((!ttsOn && !force) || !window.speechSynthesis) return;
   const u = new SpeechSynthesisUtterance(text);
   pickVoice(u, lang);
   // Pause the mic while speaking so the app doesn't hear its own voice.
   speaking++;
   rec?.abort();
   whisper.stop();
+  if (listening) setStatus('読み上げ中', 'speaking');
   const done = () => {
     speaking = Math.max(0, speaking - 1);
     if (speaking || !listening) return;
+    listeningStatus();
     if (useWhisper()) whisper.start();
     else { try { rec.start(); } catch {} }
   };
   u.onend = done;
   u.onerror = done;
   speechSynthesis.speak(u);
+}
+
+function renderDirection() {
+  document.getElementById('from-name').textContent = LANGS[current].name;
+  document.getElementById('to-name').textContent = LANGS[LANGS[current].to].name;
+}
+
+function setMicUi(on) {
+  mic.classList.toggle('rec', on);
+  mic.textContent = on ? '■' : '🎤';
+  mic.setAttribute('aria-label', on ? '止める' : '話し始める');
+  micLabel.textContent = on ? 'タップして止める' : 'タップして話す';
 }
 
 function start() {
@@ -209,21 +246,22 @@ function start() {
     // Drop Safari's late final result for these same words.
     if (rec) { rec.abort(); }
     const { shown, query } = prepareText(text, from);
-    const item = addItem(shown);
+    const item = addItem(shown, voice);
     const dst = item.querySelector('.dst');
     if (id !== undefined) itemById[id] = { text, el: item };
+    setStatus('翻訳中', 'working');
     translate(query, from, to)
-      .then(t => { dst.textContent = t; speak(t, voice); })
-      .catch(err => { dst.textContent = '（翻訳エラー：' + err.message + '）'; });
+      .then(t => { dst.textContent = t; item.dataset.say = t; scrollDown(); listeningStatus(); speak(t, voice); })
+      .catch(err => { dst.textContent = '（翻訳できませんでした）'; debugLog('translate error: ' + err.message, true); listeningStatus(); });
   };
   if (useWhisper()) {
     listening = true;
+    setMicUi(true);
+    listeningStatus();
     whisper.start();
-    mic.classList.add('rec');
-    mic.textContent = '■';
     return;
   }
-  if (!SR) { setStatus('このブラウザは音声認識に対応していません。iPhoneのSafariで開いてください。'); return; }
+  if (!SR) { setStatus('iPhoneのSafariで開いてください', 'error'); return; }
   rec = new SR();
   rec.lang = LANGS[current].rec;
   rec.interimResults = true;
@@ -248,15 +286,15 @@ function start() {
     const shownNow = buffer.text();
     if (shownNow) {
       showInterim(shownNow);
-      preview.update(from === 'ja' ? normalizeDialect(shownNow) : shownNow);
+      preview.update(normalizeSpeech(shownNow, from));
     }
   };
   rec.onerror = (e) => {
     if (e.error === 'not-allowed') {
-      setStatus('マイクが許可されていません。設定でSafariのマイクと音声入力（Siri）を有効にしてください。');
-      stop();
+      setStatus('マイクが許可されていません（設定 → Safari → マイク、Siriをオン）', 'error');
+      stop(true);
     } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-      setStatus('エラー：' + e.error);
+      setStatus('聞き取りエラー：' + e.error, 'error');
       debugLog('recognition error: ' + e.error, true);
     }
   };
@@ -269,12 +307,11 @@ function start() {
 
   listening = true;
   rec.start();
-  mic.classList.add('rec');
-  mic.textContent = '■';
-  setStatus('聞き取り中…');
+  setMicUi(true);
+  listeningStatus();
 }
 
-function stop() {
+function stop(keepStatus) {
   listening = false;
   speaking = 0;
   buffer?.clear();
@@ -284,9 +321,8 @@ function stop() {
   rec = null;
   whisper.stop();
   clearInterim();
-  mic.classList.remove('rec');
-  mic.textContent = '🎤';
-  setStatus('');
+  setMicUi(false);
+  if (!keepStatus) setStatus('待機中');
 }
 
 mic.onclick = () => {
@@ -296,22 +332,22 @@ mic.onclick = () => {
   listening ? stop() : start();
 };
 
-const ttsBtn = document.getElementById('tts');
-ttsBtn.onclick = () => {
-  ttsOn = !ttsOn;
-  ttsBtn.classList.toggle('on', ttsOn);
-  ttsBtn.textContent = ttsOn ? '🔊' : '🔇';
+document.getElementById('swap').onclick = () => {
+  current = LANGS[current].to;
+  renderDirection();
+  if (listening) { stop(); start(); }
+};
+
+const sheetBg = document.getElementById('sheet-bg');
+document.getElementById('settings-btn').onclick = () => { sheetBg.hidden = false; };
+document.getElementById('sheet-close').onclick = () => { sheetBg.hidden = true; };
+sheetBg.onclick = (e) => { if (e.target === sheetBg) sheetBg.hidden = true; };
+document.getElementById('tts').onchange = (e) => {
+  ttsOn = e.target.checked;
   if (!ttsOn) window.speechSynthesis?.cancel();
 };
 
-for (const id of ['ja', 'en']) {
-  document.getElementById(id).onclick = () => {
-    current = id;
-    document.getElementById('ja').classList.toggle('on', id === 'ja');
-    document.getElementById('en').classList.toggle('on', id === 'en');
-    if (listening) { stop(); start(); }
-  };
-}
+renderDirection();
 </script>
 </body>
 </html>

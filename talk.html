@@ -5,95 +5,108 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ほんやく">
-<meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#2563eb">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
-<title>対面通訳</title>
+<link rel="stylesheet" href="style.css">
+<title>ふたりで会話</title>
 <style>
-  :root {
-    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
-    --accent: #2563eb; --rec: #dc2626; --border: #e2e8f0; --mine: #dbeafe;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0b1120; --card: #111827; --text: #f1f5f9; --muted: #94a3b8; --border: #1f2937; --mine: #1e3a8a; }
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
-    display: flex; flex-direction: column; height: 100dvh;
-    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-  }
+  body { display: flex; flex-direction: column; height: 100dvh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
   .side {
-    flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 16px;
-    border: 3px solid transparent; transition: border-color .2s;
+    flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 14px;
+    border: 3px solid transparent; transition: border-color .2s, background .2s;
   }
-  .side.turn { border-color: var(--rec); }
+  .side.turn { border-color: var(--rec); background: color-mix(in srgb, var(--rec-soft) 35%, var(--bg)); }
   /* The English speaker sits across the table, so their half is upside down. */
   .side.en { transform: rotate(180deg); }
-  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
-  .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-size: 18px; }
-  .msg.mine { align-self: flex-end; background: var(--mine); font-size: 15px; }
-  .msg.interim { color: var(--muted); font-style: italic; }
-  .msg.refined { outline: 2px solid var(--accent); }
-  .bar { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
-  .hint { flex: 1; color: var(--muted); font-size: 14px; }
-  .side.turn .hint { color: var(--rec); font-weight: 600; }
-  .mic {
-    width: 64px; height: 64px; border-radius: 50%; border: 0; flex: none;
-    background: var(--accent); color: #fff; font-size: 26px;
+  .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .flag { font-size: 17px; font-weight: 700; }
+  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px; }
+  .guide { margin: auto 0; color: var(--muted); font-size: 14px; line-height: 1.7; text-align: center; }
+  .guide b { color: var(--text); font-size: 15px; }
+  /* What I said: small bubble. What my partner said: big translated card. */
+  .mine {
+    align-self: flex-end; max-width: 85%; background: var(--accent-soft); color: var(--text);
+    border-radius: 14px 14px 4px 14px; padding: 6px 10px; font-size: 14px;
   }
-  .side.turn .mic { background: var(--rec); }
-  .accent {
-    margin-top: 6px; align-self: flex-start; font-size: 14px; color: var(--text);
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px;
-  }
+  .mine.interim { opacity: .7; font-style: italic; }
+  .card .dst { font-size: 24px; }
+  .bar { display: flex; align-items: center; gap: 12px; }
+  .hint { flex: 1; font-size: 15px; color: var(--muted); line-height: 1.4; }
+  .side.turn .hint { color: var(--rec); font-weight: 700; }
+  .mic { width: 72px; height: 72px; font-size: 28px; }
   .middle {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px;
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--card);
   }
-  .middle a { color: var(--accent); text-decoration: none; }
-  .middle button { border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: 4px 10px; }
+  .middle a { color: var(--accent); text-decoration: none; font-size: 14px; white-space: nowrap; }
+  .stop-btn {
+    border: 1px solid var(--border); background: var(--bg); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600;
+  }
 </style>
 </head>
 <body>
-<section class="side en" id="side-en">
-  <div class="log"></div>
+<section class="side en" id="side-en" lang="en">
+  <div class="side-head"><span class="flag">🇺🇸 English</span><span class="status state">Waiting</span></div>
+  <div class="log">
+    <div class="guide"><b>How it works</b><br>Tap 🎤 on your side and speak English.<br>Your words are translated for your partner.<br>When they finish, it's automatically your turn.</div>
+  </div>
   <div class="bar">
-    <div class="hint">Tap the mic and speak English</div>
+    <div class="hint"></div>
     <button class="mic" aria-label="Speak English">🎤</button>
   </div>
-  <select id="accent" class="accent" aria-label="Your English accent"></select>
 </section>
+
 <div class="middle">
-  <a href="./">← 通常モード</a>
-  <span id="status">日本語 ⇄ English</span>
-  <button id="stop">停止</button>
+  <a href="./">← ひとりで</a>
+  <span id="status" class="status">日本語 ⇄ English</span>
+  <button id="stop" class="stop-btn">■ 停止</button>
+  <button id="settings-btn" class="icon-btn" aria-label="設定">⚙️</button>
 </div>
+
 <section class="side ja" id="side-ja">
-  <div class="log"></div>
+  <div class="side-head"><span class="flag">🇯🇵 日本語</span><span class="status state">待機中</span></div>
+  <div class="log">
+    <div class="guide"><b>使い方</b><br>スマホを2人の間に置き、話す人が自分側の🎤を押して話します。<br>訳は相手側に表示され、読み上げられます。<br>読み上げが終わると、自動で相手の番になります。</div>
+  </div>
   <div class="bar">
-    <div class="hint">マイクを押して日本語で話してください</div>
+    <div class="hint"></div>
     <button class="mic" aria-label="日本語で話す">🎤</button>
   </div>
 </section>
 
+<div id="sheet-bg" class="sheet-bg" hidden>
+  <div class="sheet" role="dialog" aria-label="設定">
+    <h2>設定</h2>
+    <label class="switch"><span><b>訳を読み上げる</b></span><input id="tts" type="checkbox" checked></label>
+    <label class="field">
+      <span>英語の聞き取り方式</span>
+      <select id="accent"></select>
+      <small>なまりのある英語は「AI・高精度」がおすすめです。動きが重いときは「AI・軽量」にしてください。</small>
+    </label>
+    <button id="sheet-close" class="primary">閉じる</button>
+  </div>
+</div>
+
+<script src="dictionaries.js"></script>
 <script src="core.js"></script>
 <script src="whisper.js"></script>
 <script>
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const SIDES = {
   ja: { rec: 'ja-JP', voice: 'ja-JP', other: 'en', el: document.getElementById('side-ja'),
-        idle: 'マイクを押して日本語で話してください', active: 'どうぞ、日本語で話してください' },
+        text: { idle: '🎤 を押して日本語で話す', turn: 'どうぞ、日本語で話してください', wait: '相手が話しています',
+                stIdle: '待機中', stTurn: 'あなたの番', stWait: '相手の番', stWork: '翻訳中', stSpeak: '読み上げ中', stLoad: 'AI準備中' } },
   en: { rec: 'en-US', voice: 'en-US', other: 'ja', el: document.getElementById('side-en'),
-        idle: 'Tap the mic and speak English', active: 'Your turn: speak English' },
+        text: { idle: 'Tap 🎤 and speak English', turn: 'Your turn — speak English', wait: 'Your partner is speaking',
+                stIdle: 'Waiting', stTurn: 'Your turn', stWait: "Partner's turn", stWork: 'Translating', stSpeak: 'Speaking', stLoad: 'Loading AI' } },
 };
 const statusEl = document.getElementById('status');
 let turn = null;      // 'ja' | 'en' | null (stopped)
 let rec = null;
 let busy = false;     // translating or speaking: mic is paused
+let phase = 'idle';   // idle | turn | work | speak | load
+let ttsOn = true;
 let interimEls = {};
 let preview = null;
 const buffer = makeSentenceBuffer((text, lang) => {
@@ -116,18 +129,16 @@ const whisper = createWhisperListener({
     if (!isWhisper(enMode)) return;
     if (state === 'error') {
       // Fall back to the iPhone recognizer so the conversation can go on.
-      statusEl.textContent = 'AI認識エラー：標準の認識に切り替えます';
+      setStatus('AIが使えないため標準の聞き取りに切り替えました', 'error');
       enMode = 'en-US';
       SIDES.en.rec = 'en-US';
       document.getElementById('accent').value = 'en-US';
-      render();
       if (turn === 'en' && !busy) listen();
       return;
     }
-    if (turn !== 'en') return;
-    const hint = SIDES.en.el.querySelector('.hint');
-    if (state === 'loading') hint.textContent = 'Loading AI model… ' + (info || 0) + '%';
-    else if (state === 'listening') { hint.textContent = SIDES.en.active; clearInterim(); }
+    if (turn !== 'en' || busy) return;
+    if (state === 'loading') { setPhase('load'); SIDES.en.el.querySelector('.hint').textContent = 'Getting the AI ready… ' + (info || 0) + '% (first time only)'; }
+    else if (state === 'listening') { setPhase('turn'); clearInterim(); }
     else if (state === 'hearing') showInterim('en', '🎙 …');
     else if (state === 'transcribing') showInterim('en', '…');
   },
@@ -142,7 +153,11 @@ const whisper = createWhisperListener({
     const { shown, query } = prepareText(text, 'en');
     sent.mine.textContent = shown;
     try {
-      sent.out.textContent = await translate(query, 'en', 'ja') + '（修正）';
+      const t = await translate(query, 'en', 'ja');
+      const dst = sent.out.querySelector('.dst');
+      dst.innerHTML = '';
+      dst.append(t, Object.assign(document.createElement('span'), { className: 'badge', textContent: '修正済み' }));
+      sent.out.dataset.say = t;
       sent.out.classList.add('refined');
     } catch {}
   },
@@ -150,22 +165,54 @@ const whisper = createWhisperListener({
 whisper.setRefine(enMode === 'whisper');
 if (isWhisper(enMode)) whisper.preload();
 
+function setStatus(text, kind = 'idle') {
+  statusEl.textContent = text;
+  statusEl.className = 'status ' + kind;
+}
+
 function logOf(lang) { return SIDES[lang].el.querySelector('.log'); }
 
-function addMsg(lang, text, mine) {
+function scrollDown(lang) { logOf(lang).scrollTop = logOf(lang).scrollHeight; }
+
+// What this side's speaker said.
+function addMine(lang, text) {
+  logOf(lang).querySelector('.guide')?.remove();
   const div = document.createElement('div');
-  div.className = 'msg' + (mine ? ' mine' : '');
+  div.className = 'mine';
   div.textContent = text;
   logOf(lang).appendChild(div);
-  logOf(lang).scrollTop = logOf(lang).scrollHeight;
+  scrollDown(lang);
+  return div;
+}
+
+// The partner's words, translated into this side's language.
+function addTranslation(lang) {
+  logOf(lang).querySelector('.guide')?.remove();
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.innerHTML = '<div class="dst">…</div><button class="replay" aria-label="replay">🔊</button>';
+  div.querySelector('.replay').onclick = () => {
+    if (!div.dataset.say || !window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(div.dataset.say);
+    pickVoice(u, SIDES[lang].voice);
+    speechSynthesis.speak(u);
+  };
+  logOf(lang).appendChild(div);
+  scrollDown(lang);
   return div;
 }
 
 function showInterim(lang, text, mine = true) {
-  if (!interimEls[lang]) interimEls[lang] = addMsg(lang, '', mine);
-  interimEls[lang].classList.add('interim');
-  interimEls[lang].textContent = text;
-  logOf(lang).scrollTop = logOf(lang).scrollHeight;
+  if (!interimEls[lang]) {
+    logOf(lang).querySelector('.guide')?.remove();
+    const el = document.createElement('div');
+    el.className = mine ? 'mine interim' : 'card interim';
+    if (!mine) el.innerHTML = '<div class="dst"></div>';
+    logOf(lang).appendChild(el);
+    interimEls[lang] = el;
+  }
+  (mine ? interimEls[lang] : interimEls[lang].querySelector('.dst')).textContent = text;
+  scrollDown(lang);
 }
 
 function clearInterim() {
@@ -173,12 +220,29 @@ function clearInterim() {
   interimEls = {};
 }
 
+function setPhase(p) { phase = p; render(); }
+
 function render() {
   for (const [lang, s] of Object.entries(SIDES)) {
-    const on = turn === lang;
-    s.el.classList.toggle('turn', on);
-    s.el.querySelector('.hint').textContent = on ? s.active : s.idle;
-    s.el.querySelector('.mic').textContent = on ? '■' : '🎤';
+    const t = s.text;
+    const mine = turn === lang;
+    s.el.classList.toggle('turn', mine && phase === 'turn');
+    s.el.querySelector('.mic').textContent = mine ? '■' : '🎤';
+    s.el.querySelector('.mic').classList.toggle('rec', mine && phase === 'turn');
+    const hint = s.el.querySelector('.hint');
+    const st = s.el.querySelector('.state');
+    let label = t.stIdle, kind = 'idle';
+    if (!turn) hint.textContent = t.idle;
+    else if (phase === 'work') { label = t.stWork; kind = 'working'; hint.textContent = ''; }
+    else if (phase === 'speak') { label = t.stSpeak; kind = 'speaking'; hint.textContent = ''; }
+    else if (mine && phase === 'load') { label = t.stLoad; kind = 'loading'; }
+    else if (mine) { label = t.stTurn; kind = 'listening'; hint.textContent = t.turn; }
+    else { label = t.stWait; hint.textContent = t.wait; }
+    st.textContent = label;
+    st.className = 'status state ' + kind;
+  }
+  if (!statusEl.classList.contains('error')) {
+    setStatus(turn ? (turn === 'ja' ? '日本語 → English' : 'English → 日本語') : '日本語 ⇄ English', turn ? 'working' : 'idle');
   }
 }
 
@@ -198,6 +262,7 @@ function listen() {
   whisper.stop();
   const lang = turn;
   preview?.cancel();
+  setPhase('turn');
   if (lang === 'en' && isWhisper(enMode)) { whisper.start(); return; }
   const other = SIDES[lang].other;
   preview = makeLivePreview(lang, other, (t) => { if (!busy && turn === lang) showInterim(other, t, false); });
@@ -221,14 +286,14 @@ function listen() {
     const shown = buffer.text();
     if (shown) {
       showInterim(lang, shown);
-      preview.update(lang === 'ja' ? normalizeDialect(shown) : shown);
+      preview.update(normalizeSpeech(shown, lang));
     }
   };
   rec.onerror = (e) => {
     if (e.error !== 'no-speech' && e.error !== 'aborted') debugLog('recognition error (' + lang + '): ' + e.error, true);
     if (e.error === 'not-allowed') {
-      statusEl.textContent = 'マイクが許可されていません';
       stopAll();
+      setStatus('マイクが許可されていません', 'error');
     }
   };
   // Safari stops recognition after a pause, so restart while it's still this side's turn.
@@ -246,16 +311,21 @@ async function handleFinal(from, text, id) {
   busy = true;
   rec?.abort();
   whisper.stop();
+  clearInterim();
+  setPhase('work');
   const { shown, query } = prepareText(text, from);
-  const mine = addMsg(from, shown, true);
-  const out = addMsg(to, '…', false);
+  const mine = addMine(from, shown);
+  const out = addTranslation(to);
   if (id !== undefined) sentById[id] = { text, mine, out };
   let translated = '';
   try {
     translated = await translate(query, from, to);
-    out.textContent = translated;
+    out.querySelector('.dst').textContent = translated;
+    out.dataset.say = translated;
+    scrollDown(to);
   } catch (err) {
-    out.textContent = from === 'ja' ? '(Translation error)' : '（翻訳エラー）';
+    out.querySelector('.dst').textContent = to === 'en' ? '(Could not translate)' : '（翻訳できませんでした）';
+    debugLog('translate error: ' + err.message, true);
   }
   if (!turn) { busy = false; return; }
   // Hand the turn to the listener once the translation has been read out.
@@ -263,10 +333,10 @@ async function handleFinal(from, text, id) {
     busy = false;
     if (!turn) return;
     turn = to;
-    render();
     listen();
   };
-  if (!translated || !window.speechSynthesis) return next();
+  if (!translated || !ttsOn || !window.speechSynthesis) return next();
+  setPhase('speak');
   const u = new SpeechSynthesisUtterance(translated);
   pickVoice(u, SIDES[to].voice);
   u.onend = next;
@@ -284,12 +354,13 @@ function stopAll() {
   whisper.stop();
   window.speechSynthesis?.cancel();
   clearInterim();
-  render();
+  setStatus('日本語 ⇄ English');
+  setPhase('idle');
 }
 
 for (const lang of ['ja', 'en']) {
   SIDES[lang].el.querySelector('.mic').onclick = () => {
-    if (!SR) { statusEl.textContent = 'iPhoneのSafariで開いてください'; return; }
+    if (!SR) { setStatus('iPhoneのSafariで開いてください', 'error'); return; }
     if (turn === lang) return stopAll();
     unlockSpeech();
     whisper.prime();
@@ -297,12 +368,21 @@ for (const lang of ['ja', 'en']) {
     busy = false;
     buffer.clear();
     clearInterim();
+    setStatus('');
     turn = lang;
-    render();
     listen();
   };
 }
 document.getElementById('stop').onclick = stopAll;
+
+const sheetBg = document.getElementById('sheet-bg');
+document.getElementById('settings-btn').onclick = () => { sheetBg.hidden = false; };
+document.getElementById('sheet-close').onclick = () => { sheetBg.hidden = true; };
+sheetBg.onclick = (e) => { if (e.target === sheetBg) sheetBg.hidden = true; };
+document.getElementById('tts').onchange = (e) => {
+  ttsOn = e.target.checked;
+  if (!ttsOn) window.speechSynthesis?.cancel();
+};
 render();
 </script>
 </body>

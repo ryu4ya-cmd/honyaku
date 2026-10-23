@@ -25,55 +25,6 @@ async function translate(text, from, to) {
   }
 }
 
-// Translation engines only know standard Japanese, so rewrite common dialect
-// (mainly Kansai, plus a few others) into standard forms before translating.
-// Order matters: longer and more specific patterns come first.
-const DIALECT = [
-  // Kansai: words
-  [/おおきに/g, 'ありがとう'],
-  [/ほんまに/g, '本当に'], [/ほんま/g, '本当'],
-  [/めっちゃ/g, 'とても'], [/めちゃめちゃ/g, 'とても'],
-  [/なんぼ/g, 'いくら'],
-  [/かまへん/g, '構わない'], [/しゃあない/g, '仕方ない'], [/しゃーない/g, '仕方ない'],
-  [/あかんわ/g, 'だめだ'], [/あかん/g, 'だめ'], [/かなん/g, 'かなわない'],
-  [/(?<=[言思買会払使])うて/g, 'って'], [/もろて/g, 'もらって'],
-  [/ほかす/g, '捨てる'], [/ほかした/g, '捨てた'],
-  [/ちゃうちゃう/g, '違う違う'], [/ちゃうん/g, '違うの'], [/ちゃうで/g, '違うよ'], [/ちゃう/g, '違う'],
-  [/せやけど/g, 'だけど'], [/せやから/g, 'だから'], [/せやな/g, 'そうだね'], [/せや/g, 'そうだ'],
-  [/ええ(?=[やなよねわで])/g, 'いい'],
-  // Kansai: negatives (〜へん)
-  [/(でけへん|できひん)/g, 'できない'],
-  [/(せえへん|せーへん|しいひん|しーひん|せん(?=[よわで]|$))/g, 'しない'],
-  [/(けえへん|けーへん|こーへん|こおへん|きいひん|きーひん)/g, '来ない'],
-  [/(?<=[かがさたなばまらわえけげせてねべめれ])へん/g, 'ない'],
-  // Kansai: copula and endings
-  [/やねん/g, 'なんだ'], [/てんねん/g, 'てるんだ'], [/ねん/g, 'んだ'],
-  [/してん(?=$|[よでな])/g, 'したんだ'],
-  [/やんか/g, 'じゃないか'], [/やんな/g, 'だよね'], [/やん(?=$|[、。])/g, 'じゃない'],
-  [/やろか/g, 'だろうか'], [/やろ(?=$|[、。う])/g, 'だろう'],
-  [/やけど/g, 'だけど'], [/やから/g, 'だから'],
-  [/やで/g, 'だよ'], [/(?<=[うくすつぶむぐる])で$/g, 'よ'], [/やな/g, 'だね'], [/やわ/g, 'だわ'], [/やね/g, 'だね'], [/や(?=$|[、。])/g, 'だ'],
-  [/(?<=何|なに)なん$/g, 'なの'], [/なん$/g, 'なの'],
-  [/(?<=[るうくすつぶむぐたい])ん$/g, 'の'],
-  // Western Japan: 〜とる / 〜よる / 〜ん negatives / 〜けん
-  [/しよる/g, 'している'], [/とる(?=$|[、。よのか])/g, 'ている'], [/とった/g, 'ていた'],
-  [/(?<=[かまらわ])ん(?=$|[、。よわで])/g, 'ない'],
-  [/じゃけん/g, 'だから'], [/けん(?=$|[、。])/g, 'から'],
-  [/ばい$/g, 'よ'], [/じゃろ/g, 'だろう'],
-  // Nagoya
-  [/でら/g, 'とても'], [/だがや/g, 'じゃないか'], [/やっとかめ/g, '久しぶり'],
-  // Tohoku / Hokkaido
-  [/なまら/g, 'とても'], [/だべ/g, 'だろう'], [/べ$/g, 'だろう'], [/めんこい/g, 'かわいい'], [/しゃっこい/g, '冷たい'],
-  // Okinawa
-  [/めんそーれ/g, 'いらっしゃいませ'], [/なんくるないさ/g, 'なんとかなるさ'],
-];
-
-function normalizeDialect(text) {
-  let out = text;
-  for (const [re, std] of DIALECT) out = out.replace(re, std);
-  return out;
-}
-
 // Speech recognition drops punctuation, so a spoken question loses its "?"
 // and gets translated as a statement. Guess questions from wording and add it back.
 const JA_Q_END = /(か|かな|かね|かしら|っけ|でしょう|だろう|の|んですか|ますか)$/;
@@ -98,10 +49,15 @@ function differentWords(a, b) {
   return norm(a) !== norm(b);
 }
 
+// Dialect and slang rules live in dictionaries.js.
+function normalizeSpeech(text, lang) {
+  return lang === 'ja' ? normalizeDialect(text) : normalizeSlang(text);
+}
+
 // Turn a raw recognition result into what to show and what to translate.
 function prepareText(text, from) {
   // Show what was said, but translate the standard-Japanese version.
-  const std = from === 'ja' ? normalizeDialect(text) : text;
+  const std = normalizeSpeech(text, from);
   const query = addQuestionMark(std, from);
   const mark = query !== std ? query.slice(-1) : '';
   return { shown: text + mark, query };
@@ -189,11 +145,11 @@ function makeLivePreview(from, to, onText) {
 // How English is recognized: 'whisper' (on-device AI, best with accents) or
 // the iPhone's recognizer with a chosen accent.
 const EN_MODES = [
-  ['whisper', 'AI: fast + accurate'],
-  ['whisper-fast', 'AI: fast only (light)'],
-  ['en-US', 'iPhone: English (US)'], ['en-GB', 'iPhone: English (UK)'],
-  ['en-AU', 'iPhone: English (Australia)'], ['en-IN', 'iPhone: English (India)'],
-  ['en-SG', 'iPhone: English (Singapore)'], ['en-PH', 'iPhone: English (Philippines)'],
+  ['whisper', 'AI・高精度（おすすめ）'],
+  ['whisper-fast', 'AI・軽量（動きが重いとき）'],
+  ['en-US', 'iPhone標準・アメリカ英語'], ['en-GB', 'iPhone標準・イギリス英語'],
+  ['en-AU', 'iPhone標準・オーストラリア英語'], ['en-IN', 'iPhone標準・インド英語'],
+  ['en-SG', 'iPhone標準・シンガポール英語'], ['en-PH', 'iPhone標準・フィリピン英語'],
 ];
 
 function getEnMode() {
