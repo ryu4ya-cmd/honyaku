@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ほんやく">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>対面通訳</title>
+<style>
+  :root {
+    --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --muted: #64748b;
+    --accent: #2563eb; --rec: #dc2626; --border: #e2e8f0; --mine: #dbeafe;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b1120; --card: #111827; --text: #f1f5f9; --muted: #94a3b8; --border: #1f2937; --mine: #1e3a8a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    display: flex; flex-direction: column; height: 100dvh;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .side {
+    flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 16px;
+    border: 3px solid transparent; transition: border-color .2s;
+  }
+  .side.turn { border-color: var(--rec); }
+  /* The English speaker sits across the table, so their half is upside down. */
+  .side.en { transform: rotate(180deg); }
+  .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-size: 18px; }
+  .msg.mine { align-self: flex-end; background: var(--mine); font-size: 15px; }
+  .msg.interim { color: var(--muted); font-style: italic; }
+  .bar { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
+  .hint { flex: 1; color: var(--muted); font-size: 14px; }
+  .side.turn .hint { color: var(--rec); font-weight: 600; }
+  .mic {
+    width: 64px; height: 64px; border-radius: 50%; border: 0; flex: none;
+    background: var(--accent); color: #fff; font-size: 26px;
+  }
+  .side.turn .mic { background: var(--rec); }
+  .middle {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    font-size: 13px; color: var(--muted);
+  }
+  .middle a { color: var(--accent); text-decoration: none; }
+  .middle button { border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: 4px 10px; }
+</style>
+</head>
+<body>
+<section class="side en" id="side-en">
+  <div class="log"></div>
+  <div class="bar">
+    <div class="hint">Tap the mic and speak English</div>
+    <button class="mic" aria-label="Speak English">🎤</button>
+  </div>
+</section>
+<div class="middle">
+  <a href="./">← 通常モード</a>
+  <span id="status">日本語 ⇄ English</span>
+  <button id="stop">停止</button>
+</div>
+<section class="side ja" id="side-ja">
+  <div class="log"></div>
+  <div class="bar">
+    <div class="hint">マイクを押して日本語で話してください</div>
+    <button class="mic" aria-label="日本語で話す">🎤</button>
+  </div>
+</section>
+
+<script src="core.js"></script>
+<script>
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SIDES = {
+  ja: { rec: 'ja-JP', voice: 'ja-JP', other: 'en', el: document.getElementById('side-ja'),
+        idle: 'マイクを押して日本語で話してください', active: 'どうぞ、日本語で話してください' },
+  en: { rec: 'en-US', voice: 'en-US', other: 'ja', el: document.getElementById('side-en'),
+        idle: 'Tap the mic and speak English', active: 'Your turn: speak English' },
+};
+const statusEl = document.getElementById('status');
+let turn = null;      // 'ja' | 'en' | null (stopped)
+let rec = null;
+let busy = false;     // translating or speaking: mic is paused
+let interimEls = {};
+
+function logOf(lang) { return SIDES[lang].el.querySelector('.log'); }
+
+function addMsg(lang, text, mine) {
+  const div = document.createElement('div');
+  div.className = 'msg' + (mine ? ' mine' : '');
+  div.textContent = text;
+  logOf(lang).appendChild(div);
+  logOf(lang).scrollTop = logOf(lang).scrollHeight;
+  return div;
+}
+
+function showInterim(lang, text) {
+  if (!interimEls[lang]) interimEls[lang] = addMsg(lang, '', true);
+  interimEls[lang].classList.add('interim');
+  interimEls[lang].textContent = text;
+  logOf(lang).scrollTop = logOf(lang).scrollHeight;
+}
+
+function clearInterim() {
+  for (const el of Object.values(interimEls)) el.remove();
+  interimEls = {};
+}
+
+function render() {
+  for (const [lang, s] of Object.entries(SIDES)) {
+    const on = turn === lang;
+    s.el.classList.toggle('turn', on);
+    s.el.querySelector('.hint').textContent = on ? s.active : s.idle;
+    s.el.querySelector('.mic').textContent = on ? '■' : '🎤';
+  }
+}
+
+// The Japanese recognizer writes English speech in Latin letters, so if the
+// Japanese side hears mostly Latin letters, treat it as English.
+function looksEnglish(text) {
+  const letters = text.replace(/[\s\d.,!?'-]/g, '');
+  if (!letters) return false;
+  const latin = (letters.match(/[A-Za-z]/g) || []).length;
+  return latin / letters.length > 0.6;
+}
+
+function listen() {
+  if (!turn) return;
+  rec?.abort();
+  const lang = turn;
+  const r = rec = new SR();
+  rec.lang = SIDES[lang].rec;
+  rec.interimResults = true;
+  rec.continuous = true;
+  rec.onresult = (e) => {
+    if (busy || turn !== lang) return;
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const text = r[0].transcript.trim();
+      if (r.isFinal) {
+        clearInterim();
+        if (text) handleFinal(lang === 'ja' && looksEnglish(text) ? 'en' : lang, text);
+        return;
+      }
+      interim += text;
+    }
+    if (interim) showInterim(lang, interim);
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'not-allowed') {
+      statusEl.textContent = 'マイクが許可されていません';
+      stopAll();
+    }
+  };
+  // Safari stops recognition after a pause, so restart while it's still this side's turn.
+  rec.onend = () => { if (rec === r && turn === lang && !busy) { try { r.start(); } catch {} } };
+  try { rec.start(); } catch {}
+}
+
+async function handleFinal(from, text) {
+  const to = SIDES[from].other;
+  busy = true;
+  rec?.abort();
+  const { shown, query } = prepareText(text, from);
+  addMsg(from, shown, true);
+  const out = addMsg(to, '…', false);
+  let translated = '';
+  try {
+    translated = await translate(query, from, to);
+    out.textContent = translated;
+  } catch (err) {
+    out.textContent = from === 'ja' ? '(Translation error)' : '（翻訳エラー）';
+  }
+  if (!turn) { busy = false; return; }
+  // Hand the turn to the listener once the translation has been read out.
+  const next = () => {
+    busy = false;
+    if (!turn) return;
+    turn = to;
+    render();
+    listen();
+  };
+  if (!translated || !window.speechSynthesis) return next();
+  const u = new SpeechSynthesisUtterance(translated);
+  pickVoice(u, SIDES[to].voice);
+  u.onend = next;
+  u.onerror = next;
+  speechSynthesis.speak(u);
+}
+
+function stopAll() {
+  turn = null;
+  busy = false;
+  rec?.abort();
+  rec = null;
+  window.speechSynthesis?.cancel();
+  clearInterim();
+  render();
+}
+
+for (const lang of ['ja', 'en']) {
+  SIDES[lang].el.querySelector('.mic').onclick = () => {
+    if (!SR) { statusEl.textContent = 'iPhoneのSafariで開いてください'; return; }
+    if (turn === lang) return stopAll();
+    unlockSpeech();
+    window.speechSynthesis?.cancel();
+    busy = false;
+    clearInterim();
+    turn = lang;
+    render();
+    listen();
+  };
+}
+document.getElementById('stop').onclick = stopAll;
+render();
+</script>
+</body>
+</html>
