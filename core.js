@@ -94,7 +94,8 @@ function pickVoice(utterance, lang) {
 // recognizer to finish (onPause, which calls rec.stop()). Its final result is
 // more accurate than the words shown while speaking, so we translate that.
 // If the final result doesn't come quickly, the words so far are used.
-const PAUSE_MS = { ja: 900, en: 1000 };
+// 2 seconds, so a speaker who stops to think is not cut off (user request).
+const PAUSE_MS = { ja: 2000, en: 2000 };
 const FINAL_WAIT_MS = 700;
 
 function makeSentenceBuffer(onFlush, onPause) {
@@ -126,7 +127,7 @@ function makeSentenceBuffer(onFlush, onPause) {
   };
   const arm = () => {
     clearTimeout(timer);
-    timer = setTimeout(paused, PAUSE_MS[lang] || 900);
+    timer = setTimeout(paused, PAUSE_MS[lang] || 2000);
   };
   return {
     final(text, l) {
