@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ほんやく 動画翻訳</title>
+<style>
+  :root { --bg: #fff; --fg: #0f172a; --sub: #64748b; --line: #e2e8f0; --acc: #2563eb; --card: #f8fafc; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111827; --fg: #f1f5f9; --sub: #94a3b8; --line: #334155; --acc: #60a5fa; --card: #1f2937; } }
+  body { margin: 0; width: 320px; background: var(--bg); color: var(--fg); font: 13px/1.5 "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  header img { width: 24px; height: 24px; }
+  header b { flex: 1; font-size: 15px; }
+  main { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .status { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .status small { color: var(--sub); display: block; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  select { font: inherit; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); max-width: 170px; }
+  button.big { font: inherit; font-weight: 600; padding: 9px; border-radius: 8px; border: 0; background: var(--acc); color: #fff; cursor: pointer; }
+  button.big.on { background: #dc2626; }
+  h2 { font-size: 12px; color: var(--sub); margin: 4px 0 0; font-weight: 600; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #94a3b8; border-radius: 11px; transition: .15s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + span { background: var(--acc); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .hint { color: var(--sub); font-size: 12px; margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icons/48.png" alt="">
+  <b>ほんやく 動画翻訳</b>
+  <label class="switch" title="字幕の翻訳 オン／オフ"><input type="checkbox" id="enabled"><span></span></label>
+</header>
+<main>
+  <div class="status" id="status">確認中…</div>
+
+  <button class="big" id="audio">🎧 音声から翻訳する（字幕がない動画）</button>
+  <p class="hint" id="audio-hint">動画の音をこのPCのAIで文字にしてから翻訳します。初回はAIの読み込みに少し時間がかかります。</p>
+
+  <h2>翻訳</h2>
+  <div class="row">動画の言語<select id="source"></select></div>
+  <div class="row">翻訳先<select id="target"></select></div>
+
+  <h2>表示</h2>
+  <div class="row">元の言語も表示<label class="switch"><input type="checkbox" id="showOriginal"><span></span></label></div>
+  <div class="row">サイトの字幕を隠す<label class="switch"><input type="checkbox" id="hideSite"><span></span></label></div>
+  <div class="row">文字の大きさ<select id="size"><option value="s">小</option><option value="m">中</option><option value="l">大</option><option value="xl">特大</option></select></div>
+  <div class="row">表示位置<select id="pos"><option value="bottom">下</option><option value="top">上</option></select></div>
+
+  <h2>読み上げ</h2>
+  <div class="row">翻訳を読み上げる<label class="switch"><input type="checkbox" id="speak"><span></span></label></div>
+  <div class="row">読み上げ中は動画を小さく<label class="switch"><input type="checkbox" id="duck"><span></span></label></div>
+  <div class="row">速さ<select id="rate"><option value="1">ふつう</option><option value="1.2">少し速め</option><option value="1.5">速め</option><option value="1.8">とても速め</option></select></div>
+
+  <h2>音声認識AI</h2>
+  <div class="row">精度<select id="model"><option value="tiny">速い（約40MB）</option><option value="base">標準（約80MB）</option><option value="small">正確・重い（約250MB）</option></select></div>
+</main>
+<script src="text.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>

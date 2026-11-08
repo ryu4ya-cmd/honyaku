@@ -25,11 +25,11 @@ button { cursor: pointer; }
 
 /* Top bar with the two screens as tabs */
 .top { display: flex; align-items: center; gap: 8px; padding: 10px 0; }
-.brand { font-weight: 700; font-size: 18px; }
+.brand { font-weight: 700; font-size: 18px; white-space: nowrap; }
 .tabs { flex: 1; display: flex; justify-content: center; }
 .tabs .seg { display: flex; background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
 .tabs a {
-  padding: 6px 14px; border-radius: 999px; font-size: 14px; color: var(--muted);
+  padding: 6px 10px; border-radius: 999px; font-size: 14px; color: var(--muted);
   text-decoration: none; white-space: nowrap;
 }
 .tabs a.on { background: var(--accent); color: #fff; font-weight: 600; }

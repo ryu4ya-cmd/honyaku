@@ -1,0 +1,6 @@
+/* The extension draws its own captions, so the site's are hidden while it runs. */
+html.honyaku-hide-site .ytp-caption-window-container,
+html.honyaku-hide-site .player-timedtext,
+html.honyaku-hide-site .atvwebplayersdk-captions-overlay,
+html.honyaku-hide-site .dss-subtitle-renderer-wrapper,
+html.honyaku-hide-site .vp-captions { opacity: 0 !important; }
