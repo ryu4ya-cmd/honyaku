@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+<title>ほんやく 動画翻訳</title>
+<style>
+  body { padding: env(safe-area-inset-top) 16px 32px; height: auto; }
+  main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; box-shadow: var(--shadow); }
+  h1 { font-size: 22px; margin: 4px 0 0; }
+  h2 { font-size: 17px; margin: 0 0 8px; }
+  p { margin: 6px 0; line-height: 1.7; }
+  ol, ul { margin: 6px 0; padding-left: 22px; line-height: 1.9; }
+  .dl { display: block; text-align: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 17px;
+    padding: 14px; border-radius: 12px; text-decoration: none; margin-top: 8px; }
+  code { background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; font-size: 14px; }
+  .muted { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">ほんやく</div>
+  <nav class="tabs"><div class="seg"><a href="./">ひとりで</a><a href="talk.html">ふたりで会話</a><a class="on" href="video.html">動画</a></div></nav>
+</header>
+<main>
+  <div class="card">
+    <h1>動画翻訳（PCのChrome用）</h1>
+    <p>YouTubeなどで海外の動画を見ているとき、字幕や話している言葉を日本語に訳して、動画の上に表示します。読み上げもできます。無料で使えます。</p>
+    <ul>
+      <li><b>字幕がある動画</b>：字幕を読み取って翻訳（YouTube、Netflix、Prime Video、Disney+ など）</li>
+      <li><b>字幕がない動画</b>：動画の音をPCの中のAIで文字にしてから翻訳</li>
+      <li>方言・スラングの言い換えは、スマホ版と同じ仕組みを使っています</li>
+    </ul>
+    <a class="dl" href="honyaku-video.zip" download>⬇ 拡張機能をダウンロード（zip・約5MB）</a>
+    <p class="muted">PCのGoogle Chrome（またはMicrosoft Edge）で使えます。iPhoneでは使えません。</p>
+  </div>
+
+  <div class="card">
+    <h2>入れ方（最初の1回だけ）</h2>
+    <ol>
+      <li>上のボタンでzipをダウンロードし、<b>右クリック →「すべて展開」</b>（Macはダブルクリック）で展開します。<code>honyaku-video</code> フォルダができます。</li>
+      <li>Chromeのアドレス欄に <code>chrome://extensions</code> と入力して開きます。</li>
+      <li>右上の<b>「デベロッパー モード」</b>をオンにします。</li>
+      <li><b>「パッケージ化されていない拡張機能を読み込む」</b>を押して、展開した <code>honyaku-video</code> フォルダを選びます。</li>
+      <li>アドレス欄の右にあるパズルのアイコン🧩から「ほんやく 動画翻訳」の📌を押すと、すぐ使えるようになります。</li>
+    </ol>
+    <p class="muted">展開したフォルダは消さずに置いておいてください。消すと拡張機能も動かなくなります。</p>
+  </div>
+
+  <div class="card">
+    <h2>使い方</h2>
+    <ol>
+      <li><b>字幕がある動画</b>：動画の字幕をオンにするだけです。YouTubeは字幕（CC）ボタンを押してください。英語の自動生成字幕でも訳せます。</li>
+      <li><b>字幕がない動画</b>：ツールバーの拡張機能アイコンを押して<b>「🎧 音声から翻訳する」</b>を押します。初回はAIの読み込みに1〜2分かかります。</li>
+      <li>アイコンのメニューで、翻訳先の言語、文字の大きさ、表示位置、<b>読み上げ</b>のオン／オフを変えられます。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>新しい版に更新するとき</h2>
+    <p>新しいzipをダウンロードして、前の <code>honyaku-video</code> フォルダの中身と入れ替えます。そのあと <code>chrome://extensions</code> で、この拡張機能の🔄（再読み込み）を押してください。</p>
+  </div>
+</main>
+</body>
+</html>
